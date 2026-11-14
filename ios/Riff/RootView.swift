@@ -113,6 +113,19 @@ struct NowPlayingView: View {
                         }.font(.system(size: 64))
                         Button("Forward 15 seconds", systemImage: "goforward.15") { library.seek(to: library.elapsed + 15) }
                     }.font(.title).labelStyle(.iconOnly)
+                    HStack(spacing: 24) {
+                        Button("Previous", systemImage: "backward.end.fill") { library.previous() }
+                        Button("Next", systemImage: "forward.end.fill") { library.next() }
+                        Button("Shuffle", systemImage: "shuffle") { library.shuffleEnabled.toggle() }
+                            .tint(library.shuffleEnabled ? Color.purple : Color.gray)
+                        Menu {
+                            ForEach(AudioLibrary.RepeatMode.allCases, id: \.self) { mode in
+                                Button(mode.rawValue.capitalized) { library.repeatMode = mode }
+                            }
+                        } label: {
+                            Label("Repeat: " + library.repeatMode.rawValue, systemImage: library.repeatMode == .one ? "repeat.1" : "repeat")
+                        }
+                    }.labelStyle(.iconOnly).buttonStyle(.bordered)
                     NavigationLink("Lyrics", systemImage: "quote.bubble") { LyricsView(library: library) }
                         .buttonStyle(.bordered)
                     if let track = library.onlineCurrent {

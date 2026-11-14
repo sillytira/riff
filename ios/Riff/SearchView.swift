@@ -20,7 +20,7 @@ struct SearchView: View {
                 }.pickerStyle(.segmented).padding()
                 List(results) { track in
                     HStack(spacing: 12) {
-                        Button { Task { await library.playOnline(track) } } label: {
+                        Button { Task { await library.playOnline(track, queue: results) } } label: {
                             HStack(spacing: 12) {
                                 TrackArtwork(url: track.artworkURL, size: 52)
                                 VStack(alignment: .leading, spacing: 4) {
