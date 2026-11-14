@@ -3,6 +3,24 @@ import XCTest
 
 @MainActor
 final class AudioLibraryTests: XCTestCase {
+    func testImportCopiesAudioAndRestoresItAfterRelaunch() throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let fixture = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "silence", withExtension: "wav"))
+        let source = root.appending(path: "original.wav")
+        let storage = root.appending(path: "library")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: fixture, to: source)
+        let library = AudioLibrary(root: storage)
+        library.importFiles([source])
+        XCTAssertNil(library.error)
+        let track = try XCTUnwrap(library.tracks.first)
+        try FileManager.default.removeItem(at: source)
+        let restored = AudioLibrary(root: storage)
+        XCTAssertEqual(restored.tracks.first?.id, track.id)
+        XCTAssertEqual(try Data(contentsOf: storage.appending(path: track.filename)), Data(contentsOf: fixture))
+    }
+
     func testInvalidAudioIsRejectedWithoutLeavingAnEntryOrCopy() throws {
         let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
