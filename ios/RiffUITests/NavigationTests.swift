@@ -47,6 +47,39 @@ final class NavigationTests: XCTestCase {
         XCTAssertTrue(app.staticTexts[renamed].waitForExistence(timeout: 5))
     }
 
+    func testStreamingDownloadAndEditingThroughTheInterface() {
+        let app = XCUIApplication()
+        app.launch()
+        app.tabBars.buttons["Discover"].tap()
+        let search = app.searchFields.firstMatch
+        XCTAssertTrue(search.waitForExistence(timeout: 5))
+        search.tap()
+        search.typeText("http://127.0.0.1:8765/ui-tone.wav\n")
+        let result = app.staticTexts["ui-tone"].firstMatch
+        XCTAssertTrue(result.waitForExistence(timeout: 30))
+        result.tap()
+        XCTAssertTrue(app.buttons["now-playing-open"].waitForExistence(timeout: 30))
+        app.buttons["Download"].firstMatch.tap()
+        app.tabBars.buttons["Downloads"].tap()
+        XCTAssertTrue(app.staticTexts["Saved offline"].waitForExistence(timeout: 30))
+        app.tabBars.buttons["Library"].tap()
+        let saved = app.staticTexts["ui-tone"].firstMatch
+        XCTAssertTrue(saved.waitForExistence(timeout: 10))
+        saved.tap()
+        app.buttons["now-playing-open"].tap()
+        XCTAssertTrue(app.navigationBars["Now Playing"].waitForExistence(timeout: 10))
+        attach(app, name: "Now Playing")
+        app.buttons["Audio Editor"].tap()
+        XCTAssertTrue(app.navigationBars["Audio Editor"].waitForExistence(timeout: 10))
+        app.buttons["Save selection as WAV"].tap()
+        XCTAssertTrue(app.buttons["Share exported audio"].waitForExistence(timeout: 30))
+        attach(app, name: "Audio Editor")
+        app.terminate()
+        app.launch()
+        app.tabBars.buttons["Library"].tap()
+        XCTAssertTrue(app.staticTexts["ui-tone (edit)"].waitForExistence(timeout: 10))
+    }
+
     private func attach(_ app: XCUIApplication, name: String) {
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = name

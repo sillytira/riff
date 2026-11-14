@@ -43,7 +43,7 @@ struct RootView: View {
                     }
                     Spacer(minLength: 0)
                 }.foregroundStyle(.primary)
-            }.buttonStyle(.plain)
+            }.buttonStyle(.plain).accessibilityIdentifier("now-playing-open")
             if library.isLoading { ProgressView() }
             else {
                 Button(library.isPlaying ? "Pause" : "Play", systemImage: library.isPlaying ? "pause.fill" : "play.fill") {
