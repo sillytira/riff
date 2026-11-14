@@ -77,9 +77,10 @@ final class NativeAudioPlayer {
     }
 
     init(contentsOf url: URL) throws {
-        file = try AVAudioFile(forReading: url)
-        guard file.length > 0 else { throw ExtractionError(message: "This audio file has no playable samples.") }
-        graph = AudioGraph(format: file.processingFormat, settings: AudioEffectSettings())
+        let audioFile = try AVAudioFile(forReading: url)
+        guard audioFile.length > 0 else { throw ExtractionError(message: "This audio file has no playable samples.") }
+        file = audioFile
+        graph = AudioGraph(format: audioFile.processingFormat, settings: AudioEffectSettings())
         schedule(from: 0)
     }
 

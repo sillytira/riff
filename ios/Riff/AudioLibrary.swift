@@ -117,6 +117,29 @@ final class AudioLibrary: NSObject {
         }
     }
 
+    func editableURL(for track: LocalTrack) -> URL? {
+        guard track.assetRelativePath == nil else { return nil }
+        return directory.appending(path: track.filename)
+    }
+
+    func importEditedFile(_ source: URL, original: LocalTrack) throws {
+        guard manifestIsReadable else { throw ExtractionError(message: "The library index is unreadable; existing data was preserved.") }
+        let id = UUID()
+        let filename = id.uuidString + ".wav"
+        let destination = directory.appending(path: filename)
+        do {
+            try FileManager.default.copyItem(at: source, to: destination)
+            _ = try AVAudioFile(forReading: destination)
+            let edited = LocalTrack(id: id, name: original.name + " (edit)", filename: filename, artist: original.artist, artworkURL: original.artworkURL)
+            let updated = tracks + [edited]
+            try JSONEncoder().encode(updated).write(to: manifest, options: .atomic)
+            tracks = updated
+        } catch {
+            try? FileManager.default.removeItem(at: destination)
+            throw error
+        }
+    }
+
     func importHLSDownload(_ source: URL, media: ResolvedMedia) async throws {
         guard manifestIsReadable else { throw ExtractionError(message: "The library index is unreadable; existing data was preserved.") }
         let home = URL(filePath: NSHomeDirectory(), directoryHint: .isDirectory).standardizedFileURL.path + "/"
