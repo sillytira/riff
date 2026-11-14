@@ -66,8 +66,23 @@ actor MediaExtractor {
 
     private func request<T: Decodable>(_ values: [String: String]) throws -> T {
         try Task.checkCancellation()
-        let data = try JSONSerialization.data(withJSONObject: values)
+        var payload = values
+        let savedCookies = try? YouTubeCredentials.read()
+        var cookieFile: URL?
+        defer { if let cookieFile { try? FileManager.default.removeItem(at: cookieFile) } }
+        if let savedCookies, CookieFile.hasYouTubeLogin(savedCookies) {
+            let file = FileManager.default.temporaryDirectory.appending(path: "riff-auth-" + UUID().uuidString + ".txt")
+            cookieFile = file
+            try savedCookies.write(to: file, options: .atomic)
+            try FileManager.default.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: file.path)
+            payload["cookiefile"] = file.path
+        }
+        let data = try JSONSerialization.data(withJSONObject: payload)
         let response = RiffPythonRequest(Bundle.main.bundlePath, String(decoding: data, as: UTF8.self))
+        if let savedCookies, let cookieFile,
+           let updated = try? Data(contentsOf: cookieFile), CookieFile.hasYouTubeLogin(updated) {
+            try? YouTubeCredentials.refresh(updated, replacing: savedCookies)
+        }
         let encoded = Data(response.utf8)
         if let failure = try? JSONDecoder().decode(ExtractionFailure.self, from: encoded) {
             throw ExtractionError(message: failure.error)

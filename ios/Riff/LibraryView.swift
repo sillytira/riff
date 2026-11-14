@@ -42,6 +42,9 @@ struct LibraryView: View {
             .navigationTitle("Riff")
             .searchable(text: $query, prompt: "Search your music")
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    NavigationLink { SettingsView() } label: { Label("Settings", systemImage: "gearshape") }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Import audio", systemImage: "plus") { importing = true }
                 }

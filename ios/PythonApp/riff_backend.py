@@ -48,9 +48,9 @@ class Log:
         pass
 
 
-def options(**extra):
+def options(cookiefile=None, **extra):
     trust = {'compat_opts': ['no-certifi']} if os.environ.get('SSL_CERT_FILE') != certifi.where() else {}
-    return dict(**trust, quiet=True, no_warnings=True, logger=Log(), cachedir=False,
+    return dict(**trust, cookiefile=cookiefile, quiet=True, no_warnings=True, logger=Log(), cachedir=False,
                 socket_timeout=25, retries=2, noplaylist=True,
                 check_formats=False, nocheckcertificate=False,
                 format='bestaudio[ext=m4a]/bestaudio[ext=mp3]/best[ext=mp4]/bestaudio/best',
@@ -118,8 +118,8 @@ def music_tracks(response):
     return found
 
 
-def music_search(query):
-    with yt_dlp.YoutubeDL(options()) as extractor:
+def music_search(query, cookiefile=None):
+    with yt_dlp.YoutubeDL(options(cookiefile=cookiefile)) as extractor:
         youtube = extractor.get_info_extractor('Youtube')
         youtube.initialize()
         response = youtube._call_api('search',
@@ -143,20 +143,20 @@ def dispatch(request):
         if not query:
             return {'tracks': []}
         if request.get('provider') == 'ytmusic' and not query.startswith(('http:', 'https:')):
-            return music_search(query)
+            return music_search(query, request.get('cookiefile'))
         prefix = 'scsearch15:' if request.get('provider') == 'soundcloud' else 'ytsearch15:'
         target = media_url(query) if query.startswith(('http:', 'https:')) else prefix + query
-        with yt_dlp.YoutubeDL(options(extract_flat='in_playlist', playlistend=30)) as extractor:
+        with yt_dlp.YoutubeDL(options(cookiefile=request.get('cookiefile'), extract_flat='in_playlist', playlistend=30)) as extractor:
             info = extractor.extract_info(target, download=False)
             entries = info.get('entries', [info])
             return {'tracks': [track(entry) for entry in entries if entry]}
     if operation == 'resolve':
-        with yt_dlp.YoutubeDL(options()) as extractor:
+        with yt_dlp.YoutubeDL(options(cookiefile=request.get('cookiefile'))) as extractor:
             info = extractor.extract_info(media_url(request['url']), download=False)
             return dict(track=track(info), streamURL=info['url'], headers=info.get('http_headers', {}),
                         ext=info.get('ext'), protocol=info.get('protocol'))
     if operation == 'playlist':
-        opts = options(extract_flat='in_playlist', playlistend=1000)
+        opts = options(cookiefile=request.get('cookiefile'), extract_flat='in_playlist', playlistend=1000)
         opts['noplaylist'] = False
         with yt_dlp.YoutubeDL(opts) as extractor:
             info = extractor.extract_info(media_url(request['url']), download=False)
