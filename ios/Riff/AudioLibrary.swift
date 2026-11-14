@@ -142,8 +142,8 @@ final class AudioLibrary: NSObject {
 
     func importHLSDownload(_ source: URL, media: ResolvedMedia) async throws {
         guard manifestIsReadable else { throw ExtractionError(message: "The library index is unreadable; existing data was preserved.") }
-        let home = URL(filePath: NSHomeDirectory(), directoryHint: .isDirectory).standardizedFileURL.path + "/"
-        guard source.standardizedFileURL.path.hasPrefix(home) else {
+        let home = URL(filePath: NSHomeDirectory(), directoryHint: .isDirectory).resolvingSymlinksInPath().path + "/"
+        guard source.resolvingSymlinksInPath().path.hasPrefix(home) else {
             throw ExtractionError(message: "The offline asset is outside the application sandbox.")
         }
         let asset = AVURLAsset(url: source)
@@ -153,7 +153,7 @@ final class AudioLibrary: NSObject {
         let track = LocalTrack(id: UUID(), name: media.track.title, filename: source.lastPathComponent,
                                artist: media.track.artist, artworkURL: media.track.artworkURL,
                                webpageURL: media.track.webpageURL,
-                               assetRelativePath: String(source.standardizedFileURL.path.dropFirst(home.count)))
+                               assetRelativePath: String(source.resolvingSymlinksInPath().path.dropFirst(home.count)))
         let updated = tracks + [track]
         try JSONEncoder().encode(updated).write(to: manifest, options: .atomic)
         tracks = updated

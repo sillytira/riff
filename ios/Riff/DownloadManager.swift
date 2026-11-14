@@ -30,8 +30,13 @@ final class DownloadManager {
                     self.update(id, "Saving HLS audio offline…")
                     let asset = AVURLAsset(url: url, options: ["AVURLAssetHTTPHeaderFieldsKey": media.headers])
                     let location = try await HLSDownloader.shared.download(asset, title: track.title)
-                    try Task.checkCancellation()
-                    try await library.importHLSDownload(location, media: media)
+                    do {
+                        try Task.checkCancellation()
+                        try await library.importHLSDownload(location, media: media)
+                    } catch {
+                        try? FileManager.default.removeItem(at: location)
+                        throw error
+                    }
                     self.update(id, "Saved offline", active: false)
                     self.tasks[id] = nil
                     return
