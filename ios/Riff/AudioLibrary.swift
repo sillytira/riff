@@ -101,7 +101,7 @@ final class AudioLibrary: NSObject {
     private func persistEffects() {
         guard effectsWritable else { return }
         do { try JSONEncoder().encode(effects).write(to: effectsFile, options: .atomic) }
-        catch { error = "Could not save audio effects: " + error.localizedDescription }
+        catch { self.error = "Could not save audio effects: " + error.localizedDescription }
     }
 
     func importFiles(_ urls: [URL]) {
