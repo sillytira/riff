@@ -17,3 +17,5 @@ yt-cookies.txt
 # Native iOS build products
 /ios/build/
 /ios/*.xcodeproj/
+
+/ios/Riff/Info.plist
