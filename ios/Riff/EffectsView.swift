@@ -9,7 +9,7 @@ struct EffectsView: View {
                 Section { Text("Download a direct audio file to use EQ, pitch, reverb and distortion. Playback speed also works while streaming.").foregroundStyle(.secondary) }
             }
             Section("Playback") {
-                control("Speed", value: $library.effects.rate, range: 0.25...2, suffix: "×")
+                control("Speed", value: $library.effects.rate, range: 0.25...4, suffix: "×")
                 control("Pitch", value: $library.effects.pitch, range: -12...12, suffix: " st")
             }
             Section("Equalizer") {
@@ -35,7 +35,7 @@ struct EffectsView: View {
                 control("Reverb", value: $library.effects.reverb, range: 0...100, suffix: "%")
                 control("Distortion", value: $library.effects.distortion, range: 0...100, suffix: "%")
             }
-            Button("Reset all effects") { library.effects = AudioEffectSettings() }
+            Button("Reset all effects") { library.resetEffects() }
         }.navigationTitle("Audio Effects")
     }
     private func control(_ title: String, value: Binding<Float>, range: ClosedRange<Float>, suffix: String) -> some View {

@@ -24,6 +24,8 @@ final class AudioLibrary: NSObject {
         didSet {
             player?.settings = effects
             if isPlaying { streamPlayer?.rate = effects.rate }
+            if playingTitle != nil { commands.update() }
+            persistEffects()
         }
     }
     var shuffleEnabled = false
@@ -57,6 +59,8 @@ final class AudioLibrary: NSObject {
     }
     @ObservationIgnored private var player: NativeAudioPlayer?
     @ObservationIgnored private let directory: URL
+    @ObservationIgnored private let effectsFile: URL
+    @ObservationIgnored private var effectsWritable = true
     @ObservationIgnored private let manifest: URL
 
     override convenience init() {
@@ -66,6 +70,7 @@ final class AudioLibrary: NSObject {
     init(root: URL) {
         directory = root
         manifest = root.appending(path: "library.json")
+        effectsFile = root.appending(path: "effects.json")
         super.init()
         do {
             try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -73,6 +78,30 @@ final class AudioLibrary: NSObject {
                 tracks = try JSONDecoder().decode([LocalTrack].self, from: Data(contentsOf: manifest))
             }
         } catch { self.error = error.localizedDescription; manifestIsReadable = false }
+        do {
+            if FileManager.default.fileExists(atPath: effectsFile.path) {
+                let saved = try JSONDecoder().decode(AudioEffectSettings.self, from: Data(contentsOf: effectsFile))
+                guard saved.gains.count == 10, saved.gains.allSatisfy({ $0.isFinite && abs($0) <= 12 }),
+                      saved.rate.isFinite, (0.25...4).contains(saved.rate),
+                      saved.pitch.isFinite, (-24...24).contains(saved.pitch),
+                      saved.reverb.isFinite, (0...100).contains(saved.reverb),
+                      saved.distortion.isFinite, (0...100).contains(saved.distortion) else {
+                    throw ExtractionError(message: "Saved effects are invalid. Reset audio effects to recover them.")
+                }
+                effects = saved
+            }
+        } catch { self.error = error.localizedDescription; effectsWritable = false }
+    }
+
+    func resetEffects() {
+        effectsWritable = true
+        effects = AudioEffectSettings()
+    }
+
+    private func persistEffects() {
+        guard effectsWritable else { return }
+        do { try JSONEncoder().encode(effects).write(to: effectsFile, options: .atomic) }
+        catch { error = "Could not save audio effects: " + error.localizedDescription }
     }
 
     func importFiles(_ urls: [URL]) {

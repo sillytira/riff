@@ -37,6 +37,30 @@ final class AudioProcessingTests: XCTestCase {
         XCTAssertGreaterThan(try rms(output), 0.02)
     }
 
+    func testNativePlayerAdvancesPausesSeeksAndResumes() async throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = try tone(in: root)
+        try AVAudioSession.sharedInstance().setCategory(.playback)
+        try AVAudioSession.sharedInstance().setActive(true)
+        let player = try NativeAudioPlayer(contentsOf: source)
+        defer { player.stop() }
+        XCTAssertTrue(player.prepareToPlay())
+        XCTAssertTrue(player.play())
+        try await Task.sleep(for: .milliseconds(250))
+        XCTAssertGreaterThan(player.currentTime, 0.05)
+        player.pause()
+        let paused = player.currentTime
+        try await Task.sleep(for: .milliseconds(100))
+        XCTAssertEqual(player.currentTime, paused, accuracy: 0.03)
+        player.currentTime = 0.5
+        XCTAssertEqual(player.currentTime, 0.5, accuracy: 0.001)
+        XCTAssertTrue(player.play())
+        try await Task.sleep(for: .milliseconds(200))
+        XCTAssertGreaterThan(player.currentTime, 0.55)
+    }
+
     func testRateChangesExportLengthAndPitchDoesNot() async throws {
         let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

@@ -21,6 +21,19 @@ final class AudioLibraryTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: storage.appending(path: track.filename)), try Data(contentsOf: fixture))
     }
 
+    func testAudioEffectsPersistAcrossRelaunch() throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let library = AudioLibrary(root: root)
+        library.effects.pitch = 5
+        library.effects.gains[3] = 3
+        let restored = AudioLibrary(root: root)
+        XCTAssertEqual(restored.effects.pitch, 5)
+        XCTAssertEqual(restored.effects.gains[3], 3)
+        restored.resetEffects()
+        XCTAssertEqual(AudioLibrary(root: root).effects, AudioEffectSettings())
+    }
+
     func testInvalidAudioIsRejectedWithoutLeavingAnEntryOrCopy() throws {
         let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
