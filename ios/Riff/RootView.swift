@@ -126,7 +126,7 @@ struct NowPlayingView: View {
                             Label("Repeat: " + library.repeatMode.rawValue, systemImage: library.repeatMode == .one ? "repeat.1" : "repeat")
                         }
                     }.labelStyle(.iconOnly).buttonStyle(.bordered)
-                    NavigationLink("Lyrics", systemImage: "quote.bubble") { LyricsView(library: library) }
+                    NavigationLink { LyricsView(library: library) } label: { Label("Lyrics", systemImage: "quote.bubble") }
                         .buttonStyle(.bordered)
                     if let track = library.onlineCurrent {
                         Button("Save offline", systemImage: "arrow.down.circle") { downloads.download(track, into: library) }
