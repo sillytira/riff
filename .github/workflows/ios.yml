@@ -35,7 +35,21 @@ jobs:
           RIFF_FIXTURE_PID=$!
           trap 'kill "$RIFF_FIXTURE_PID"' EXIT
           DEVICE_ID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(v["udid"] for group in d["devices"].values() for v in group if v["name"].startswith("iPhone")))')
-          xcodebuild -project Riff.xcodeproj -scheme Riff -destination "platform=iOS Simulator,id=$DEVICE_ID" -parallel-testing-enabled NO ARCHS="$(uname -m)" CODE_SIGNING_ALLOWED=NO test
+          xcodebuild -project Riff.xcodeproj -scheme Riff -destination "platform=iOS Simulator,id=$DEVICE_ID" -parallel-testing-enabled NO ARCHS="$(uname -m)" CODE_SIGNING_ALLOWED=NO -resultBundlePath build/NativeTests.xcresult test
+      - name: Export UI test screenshots
+        if: always()
+        run: |
+          if [ -d ios/build/NativeTests.xcresult ]; then
+            xcrun xcresulttool export attachments --path ios/build/NativeTests.xcresult --output-path ios/build/screenshots
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Native-validation
+          path: |
+            ios/build/screenshots
+            ios/build/NativeTests.xcresult
+          if-no-files-found: ignore
       - name: Build unsigned device IPA
         run: ios/scripts/build-unsigned.sh
       - uses: actions/upload-artifact@v4

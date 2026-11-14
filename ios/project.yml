@@ -44,12 +44,18 @@ targets:
     sources: [RiffTests]
     dependencies:
       - target: Riff
+  RiffUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [RiffUITests]
+    dependencies:
+      - target: Riff
 schemes:
   Riff:
     build:
       targets:
         Riff: all
     test:
-      targets: [RiffTests]
+      targets: [RiffTests, RiffUITests]
       environmentVariables:
         RIFF_FIXTURE_SERVER: http://127.0.0.1:8765

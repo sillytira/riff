@@ -54,6 +54,7 @@ actor MediaExtractor {
     }
 
     private func request<T: Decodable>(_ values: [String: String]) throws -> T {
+        try Task.checkCancellation()
         let data = try JSONSerialization.data(withJSONObject: values)
         let response = RiffPythonRequest(Bundle.main.bundlePath, String(decoding: data, as: UTF8.self))
         let encoded = Data(response.utf8)
