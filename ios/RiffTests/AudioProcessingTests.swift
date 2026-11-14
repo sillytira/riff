@@ -37,6 +37,34 @@ final class AudioProcessingTests: XCTestCase {
         XCTAssertGreaterThan(try rms(output), 0.02)
     }
 
+    func testRateChangesExportLengthAndPitchDoesNot() async throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = try tone(in: root)
+        var fast = AudioEffectSettings()
+        fast.rate = 2
+        let fastOutput = root.appending(path: "fast.wav")
+        try await AudioProcessor.shared.exportWAV(input: source, output: fastOutput, start: 0, end: 1, settings: fast)
+        XCTAssertEqual(try AVAudioFile(forReading: fastOutput).length, 22050)
+        var pitched = AudioEffectSettings()
+        pitched.pitch = 12
+        let pitchOutput = root.appending(path: "pitch.wav")
+        try await AudioProcessor.shared.exportWAV(input: source, output: pitchOutput, start: 0, end: 1, settings: pitched)
+        let file = try AVAudioFile(forReading: pitchOutput)
+        XCTAssertEqual(file.length, 44100)
+        let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: 44100)!
+        try file.read(into: buffer)
+        let samples = buffer.floatChannelData![0]
+        var risingCrossings = 0
+        for frame in 10001..<30000 {
+            if samples[frame - 1] <= 0 && samples[frame] > 0 { risingCrossings += 1 }
+        }
+        let frequency = Double(risingCrossings) * 44100 / 19999
+        XCTAssertGreaterThan(frequency, 1800)
+        XCTAssertLessThan(frequency, 2200)
+    }
+
     func testEqualizerChangesActualRenderedAudio() async throws {
         let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

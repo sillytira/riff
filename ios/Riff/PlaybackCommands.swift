@@ -43,7 +43,7 @@ final class PlaybackCommands {
             MPMediaItemPropertyArtist: library.playingArtist,
             MPMediaItemPropertyPlaybackDuration: library.duration,
             MPNowPlayingInfoPropertyElapsedPlaybackTime: library.elapsed.isFinite ? library.elapsed : 0,
-            MPNowPlayingInfoPropertyPlaybackRate: library.isPlaying ? 1 : 0,
+            MPNowPlayingInfoPropertyPlaybackRate: library.isPlaying ? Double(library.effects.rate) : 0,
             MPNowPlayingInfoPropertyMediaType: MPNowPlayingInfoMediaType.audio.rawValue
         ]
     }
