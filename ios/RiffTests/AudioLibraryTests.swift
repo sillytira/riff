@@ -18,7 +18,7 @@ final class AudioLibraryTests: XCTestCase {
         try FileManager.default.removeItem(at: source)
         let restored = AudioLibrary(root: storage)
         XCTAssertEqual(restored.tracks.first?.id, track.id)
-        XCTAssertEqual(try Data(contentsOf: storage.appending(path: track.filename)), Data(contentsOf: fixture))
+        XCTAssertEqual(try Data(contentsOf: storage.appending(path: track.filename)), try Data(contentsOf: fixture))
     }
 
     func testInvalidAudioIsRejectedWithoutLeavingAnEntryOrCopy() throws {
