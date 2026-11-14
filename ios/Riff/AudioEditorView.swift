@@ -58,13 +58,13 @@ struct AudioEditorView: View {
                         Slider(value: Binding(get: { end }, set: { end = max($0, start + min(0.01, duration)) }), in: 0...duration).accessibilityLabel("Selection end")
                         Button("Preview selection start", systemImage: "play") { library.seek(to: start); if !library.isPlaying { library.togglePlayback() } }
                     }
-                    Section("Export") {
+                    Section {
                         Toggle("Apply current audio effects", isOn: $includeEffects)
                         Button("Save selection as WAV", systemImage: "waveform") { export(url: url, track: track) }.disabled(exporting)
                         if exporting { ProgressView("Rendering audio…") }
                         if let exported { ShareLink("Share exported audio", item: exported) }
                         if let error { Text(error).foregroundStyle(.red) }
-                    } footer: { Text("The exported selection is saved as a new track. The original audio is preserved.") }
+                    } header: { Text("Export") } footer: { Text("The exported selection is saved as a new track. The original audio is preserved.") }
                 }
                 .task(id: track.id) {
                     do {
@@ -84,14 +84,14 @@ struct AudioEditorView: View {
     private func export(url: URL, track: LocalTrack) {
         exporting = true
         error = nil
-        let start = start, end = end
+        let selectedStart = self.start, selectedEnd = self.end
         let settings = includeEffects ? library.effects : AudioEffectSettings()
         Task {
             do {
                 let folder = FileManager.default.temporaryDirectory.appending(path: "RiffExports")
                 try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
                 let output = folder.appending(path: UUID().uuidString + ".wav")
-                try await AudioProcessor.shared.exportWAV(input: url, output: output, start: start, end: end, settings: settings)
+                try await AudioProcessor.shared.exportWAV(input: url, output: output, start: selectedStart, end: selectedEnd, settings: settings)
                 try library.importEditedFile(output, original: track)
                 exported = output
             } catch { self.error = error.localizedDescription }
