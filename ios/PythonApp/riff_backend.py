@@ -6,7 +6,7 @@ import urllib.parse
 import certifi
 import yt_dlp
 
-os.environ['SSL_CERT_FILE'] = certifi.where()
+os.environ.setdefault('SSL_CERT_FILE', certifi.where())
 
 # Supply yt-dlp's JS challenge protocol through Apple's in-process interpreter.
 # Hash/version checking of the bundled EJS scripts remains in EJSBaseJCP.
@@ -48,7 +48,8 @@ class Log:
 
 
 def options(**extra):
-    return dict(quiet=True, no_warnings=True, logger=Log(), cachedir=False,
+    trust = {'compat_opts': ['no-certifi']} if os.environ.get('SSL_CERT_FILE') != certifi.where() else {}
+    return dict(**trust, quiet=True, no_warnings=True, logger=Log(), cachedir=False,
                 socket_timeout=25, retries=2, noplaylist=True,
                 check_formats=False, nocheckcertificate=False,
                 format='bestaudio[ext=m4a]/bestaudio[ext=mp3]/best[ext=mp4]/bestaudio/best',

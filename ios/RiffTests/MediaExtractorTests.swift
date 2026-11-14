@@ -14,6 +14,24 @@ final class MediaExtractorTests: XCTestCase {
         XCTAssertEqual(result?["answer"], 42)
     }
 
+    func testHTTPAudioResolutionDownloadAndOfflinePersistence() async throws {
+        let base = try XCTUnwrap(ProcessInfo.processInfo.environment["RIFF_FIXTURE_SERVER"])
+        let media = try await MediaExtractor.shared.resolve(base + "/silence.wav")
+        XCTAssertEqual(media.ext, "wav")
+        let url = try XCTUnwrap(URL(string: media.streamURL))
+        let (file, response) = try await URLSession.shared.download(from: url)
+        defer { try? FileManager.default.removeItem(at: file) }
+        XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
+        let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let library = AudioLibrary(root: root)
+        try library.importDownload(file, media: media)
+        XCTAssertEqual(library.tracks.count, 1)
+        let restored = AudioLibrary(root: root)
+        XCTAssertEqual(restored.tracks.first?.webpageURL, media.track.webpageURL)
+        XCTAssertEqual(restored.tracks.first?.id, library.tracks.first?.id)
+    }
+
     func testEmptySearchReturnsWithoutNetwork() async throws {
         let tracks = try await MediaExtractor.shared.search("  ", provider: "youtube")
         XCTAssertTrue(tracks.isEmpty)

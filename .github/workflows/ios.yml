@@ -18,6 +18,8 @@ jobs:
         run: brew install xcodegen
       - name: Prepare standalone extraction runtime
         run: ios/scripts/prepare-python.sh
+      - name: Test extraction protocol
+        run: PYTHONPATH=ios/PythonApp:ios/Dependencies/python-packages python3 -m unittest discover -s ios/PythonTests -v
       - name: Compile for simulator
         working-directory: ios
         run: |
@@ -26,6 +28,9 @@ jobs:
       - name: Test on iPhone simulator
         working-directory: ios
         run: |
+          python3 -m http.server 8765 --bind 127.0.0.1 --directory RiffTests/Fixtures > /tmp/riff-fixture-server.log 2>&1 &
+          RIFF_FIXTURE_PID=$!
+          trap 'kill "$RIFF_FIXTURE_PID"' EXIT
           DEVICE_ID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(v["udid"] for group in d["devices"].values() for v in group if v["name"].startswith("iPhone")))')
           xcodebuild -project Riff.xcodeproj -scheme Riff -destination "platform=iOS Simulator,id=$DEVICE_ID" ARCHS="$(uname -m)" CODE_SIGNING_ALLOWED=NO test
       - name: Build unsigned device IPA
