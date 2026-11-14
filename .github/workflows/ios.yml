@@ -21,6 +21,11 @@ jobs:
         run: |
           xcodegen generate
           xcodebuild -project Riff.xcodeproj -scheme Riff -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
+      - name: Test on iPhone simulator
+        working-directory: ios
+        run: |
+          DEVICE_ID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(v["udid"] for group in d["devices"].values() for v in group if v["name"].startswith("iPhone")))')
+          xcodebuild -project Riff.xcodeproj -scheme Riff -destination "platform=iOS Simulator,id=$DEVICE_ID" CODE_SIGNING_ALLOWED=NO test
       - name: Build unsigned device IPA
         run: ios/scripts/build-unsigned.sh
       - uses: actions/upload-artifact@v4

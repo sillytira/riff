@@ -23,8 +23,16 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: io.github.rootscripts.riff.ios
+  RiffTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [RiffTests]
+    dependencies:
+      - target: Riff
 schemes:
   Riff:
     build:
       targets:
         Riff: all
+    test:
+      targets: [RiffTests]

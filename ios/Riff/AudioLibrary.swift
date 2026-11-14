@@ -18,8 +18,11 @@ final class AudioLibrary: NSObject, AVAudioPlayerDelegate {
     @ObservationIgnored private let directory: URL
     @ObservationIgnored private let manifest: URL
 
-    override init() {
-        let root = URL.documentsDirectory.appending(path: "Riff", directoryHint: .isDirectory)
+    override convenience init() {
+        self.init(root: URL.documentsDirectory.appending(path: "Riff", directoryHint: .isDirectory))
+    }
+
+    init(root: URL) {
         directory = root
         manifest = root.appending(path: "library.json")
         super.init()
