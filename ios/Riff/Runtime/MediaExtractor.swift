@@ -8,6 +8,7 @@ struct OnlineTrack: Codable, Identifiable, Sendable {
     let artworkURL: String?
     let duration: Double?
     let provider: String
+    var album: String? = nil
 }
 
 struct ResolvedMedia: Decodable, Sendable {

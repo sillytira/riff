@@ -15,6 +15,7 @@ struct SearchView: View {
         NavigationStack {
             VStack(spacing: 0) {
                 Picker("Music provider", selection: $provider) {
+                    Text("YT Music").tag("ytmusic").accessibilityLabel("YouTube Music")
                     Text("YouTube").tag("youtube")
                     Text("SoundCloud").tag("soundcloud")
                 }.pickerStyle(.segmented).padding()

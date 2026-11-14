@@ -31,6 +31,22 @@ class BackendTests(unittest.TestCase):
             self.assertEqual(resolved['streamURL'], 'https://cdn.example.com/song.m4a')
             self.assertEqual(resolved['headers']['User-Agent'], 'Riff')
 
+    def test_youtube_music_metadata_duration_unicode_and_deduplication(self):
+        renderer = {'musicResponsiveListItemRenderer': {
+            'playlistItemData': {'videoId': 'abcdefghijk'},
+            'flexColumns': [
+                {'musicResponsiveListItemFlexColumnRenderer': {'text': {'runs': [{'text': 'La Luna 🌙'}]}}},
+                {'musicResponsiveListItemFlexColumnRenderer': {'text': {'runs': [{'text': 'Artist • Album • 3:05'}]}}},
+            ],
+        }}
+        tracks = backend.music_tracks({'contents': [renderer, renderer]})
+        self.assertEqual(len(tracks), 1)
+        self.assertEqual(tracks[0]['title'], 'La Luna 🌙')
+        self.assertEqual(tracks[0]['artist'], 'Artist')
+        self.assertEqual(tracks[0]['album'], 'Album')
+        self.assertEqual(tracks[0]['duration'], 185)
+        self.assertEqual(tracks[0]['webpageURL'], 'https://music.youtube.com/watch?v=abcdefghijk')
+
     def test_arbitrary_schemes_are_rejected(self):
         for value in ['file:///etc/passwd', 'javascript:alert(1)', 'ftp://host/file', 'not a URL']:
             with self.subTest(value=value):

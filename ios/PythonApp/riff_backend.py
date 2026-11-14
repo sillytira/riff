@@ -1,6 +1,7 @@
 """Standalone media extraction. No subprocesses, web service or insecure TLS override."""
 import json
 import os
+import re
 import urllib.parse
 
 import certifi
@@ -63,7 +64,7 @@ def track(info):
         webpage = 'https://www.youtube.com/watch?v=' + identity
     return dict(id=identity, title=info.get('track') or info.get('title') or 'Untitled',
                 artist=info.get('artist') or info.get('uploader') or info.get('channel') or '',
-                webpageURL=webpage, artworkURL=info.get('thumbnail'),
+                webpageURL=webpage, artworkURL=info.get('thumbnail') or next((item.get('url') for item in reversed(info.get('thumbnails') or []) if item.get('url')), None),
                 duration=info.get('duration'), provider=info.get('extractor_key') or info.get('ie_key') or '')
 
 
@@ -72,6 +73,59 @@ def media_url(value):
     if parsed.scheme not in ('https', 'http') or not parsed.hostname:
         raise ValueError('Enter a valid HTTP or HTTPS media URL.')
     return value
+
+
+def music_tracks(response):
+    def renderers(value):
+        if isinstance(value, dict):
+            if 'musicResponsiveListItemRenderer' in value:
+                yield value['musicResponsiveListItemRenderer']
+            else:
+                for child in value.values():
+                    yield from renderers(child)
+        elif isinstance(value, list):
+            for child in value:
+                yield from renderers(child)
+
+    found = []
+    seen = set()
+    for renderer in renderers(response):
+        columns = renderer.get('flexColumns', [])
+        def runs(index):
+            if index >= len(columns):
+                return []
+            return columns[index].get('musicResponsiveListItemFlexColumnRenderer', {}).get('text', {}).get('runs', [])
+        overlay = renderer.get('overlay', {}).get('musicItemThumbnailOverlayRenderer', {}).get('content', {}).get('musicPlayButtonRenderer', {})
+        video_id = renderer.get('playlistItemData', {}).get('videoId') or overlay.get('playNavigationEndpoint', {}).get('watchEndpoint', {}).get('videoId')
+        if not video_id or not re.fullmatch(r'[A-Za-z0-9_-]{11}', video_id) or video_id in seen:
+            continue
+        title = ''.join(run.get('text', '') for run in runs(0)).strip()
+        if not title:
+            continue
+        segments = [part.strip() for part in re.split(r'\s*[•·]\s*', ''.join(run.get('text', '') for run in runs(1)))]
+        segments = [part for part in segments if part and part.lower() not in ('song', 'video')]
+        duration = None
+        if segments and re.fullmatch(r'\d+:\d{2}(?::\d{2})?', segments[-1]):
+            duration = 0
+            for component in segments.pop().split(':'):
+                duration = duration * 60 + int(component)
+        thumbnails = renderer.get('thumbnail', {}).get('musicThumbnailRenderer', {}).get('thumbnail', {}).get('thumbnails', [])
+        artwork = thumbnails[-1].get('url') if thumbnails else f'https://i.ytimg.com/vi/{video_id}/hqdefault.jpg'
+        found.append(dict(id=video_id, title=title, artist=segments[0] if segments else '',
+                          album=segments[1] if len(segments) > 1 else None, duration=duration,
+                          artworkURL=artwork, webpageURL=f'https://music.youtube.com/watch?v={video_id}', provider='YoutubeMusic'))
+        seen.add(video_id)
+    return found
+
+
+def music_search(query):
+    with yt_dlp.YoutubeDL(options()) as extractor:
+        youtube = extractor.get_info_extractor('Youtube')
+        youtube.initialize()
+        response = youtube._call_api('search',
+            {'query': query, 'params': 'EgWKAQIIAWoMEA4QChADEAQQCRAF'},
+            video_id=query, default_client='web_music', api_hostname='music.youtube.com')
+        return {'tracks': music_tracks(response)}
 
 
 def dispatch(request):
@@ -88,6 +142,8 @@ def dispatch(request):
         query = str(request.get('query', '')).strip()
         if not query:
             return {'tracks': []}
+        if request.get('provider') == 'ytmusic' and not query.startswith(('http:', 'https:')):
+            return music_search(query)
         prefix = 'scsearch15:' if request.get('provider') == 'soundcloud' else 'ytsearch15:'
         target = media_url(query) if query.startswith(('http:', 'https:')) else prefix + query
         with yt_dlp.YoutubeDL(options(extract_flat='in_playlist', playlistend=30)) as extractor:
