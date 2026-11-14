@@ -47,6 +47,17 @@ final class NavigationTests: XCTestCase {
         XCTAssertTrue(app.staticTexts[renamed].waitForExistence(timeout: 5))
     }
 
+    func testSettingsAccountControlsAreReachable() {
+        let app = XCUIApplication()
+        app.launch()
+        app.tabBars.buttons["Library"].tap()
+        app.buttons["Settings"].tap()
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Sign in to YouTube"].exists)
+        XCTAssertTrue(app.buttons["Import browser cookies"].exists)
+        attach(app, name: "Settings")
+    }
+
     func testStreamingDownloadAndEditingThroughTheInterface() {
         let app = XCUIApplication()
         app.launch()

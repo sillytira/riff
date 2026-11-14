@@ -4,20 +4,22 @@ import UniformTypeIdentifiers
 
 struct SettingsView: View {
     @State private var signedIn = false
+    @State private var sessionStored = false
     @State private var signingIn = false
     @State private var importingCookies = false
     @State private var error: String?
     var body: some View {
         Form {
             Section {
-                LabeledContent("YouTube", value: signedIn ? "Sign-in saved" : "Not signed in")
+                LabeledContent("YouTube", value: signedIn ? "Sign-in saved" : (sessionStored ? "Sign-in expired" : "Not signed in"))
                 Button("Sign in to YouTube") { signingIn = true }
                 Button("Import browser cookies") { importingCookies = true }
-                if signedIn {
+                if sessionStored {
                     Button("Sign out", role: .destructive) {
                         do {
                             try YouTubeCredentials.delete()
                             signedIn = false
+                            sessionStored = false
                             WKWebsiteDataStore.default().removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast) { }
                         } catch { self.error = error.localizedDescription }
                     }
@@ -47,6 +49,8 @@ struct SettingsView: View {
         } message: { Text(error ?? "") }
     }
     private func refresh() {
-        signedIn = (try? YouTubeCredentials.read()).map { CookieFile.hasYouTubeLogin($0) } ?? false
+        let data = try? YouTubeCredentials.read()
+        sessionStored = data != nil
+        signedIn = data.map { CookieFile.hasYouTubeLogin($0) } ?? false
     }
 }

@@ -41,6 +41,16 @@ struct ExtractorHealth: Decodable, Sendable {
 actor MediaExtractor {
     static let shared = MediaExtractor()
 
+    private init() {
+        // Remove disposable jars left by an interrupted app process.
+        let directory = FileManager.default.temporaryDirectory
+        if let files = try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) {
+            for file in files where file.lastPathComponent.hasPrefix("riff-auth-") && file.pathExtension == "txt" {
+                try? FileManager.default.removeItem(at: file)
+            }
+        }
+    }
+
     func health() throws -> ExtractorHealth {
         try request(["operation": "health"])
     }
