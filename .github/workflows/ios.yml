@@ -16,6 +16,8 @@ jobs:
         run: xcodebuild -version
       - name: Install project generator
         run: brew install xcodegen
+      - name: Prepare standalone extraction runtime
+        run: ios/scripts/prepare-python.sh
       - name: Compile for simulator
         working-directory: ios
         run: |

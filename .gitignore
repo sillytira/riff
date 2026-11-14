@@ -19,3 +19,5 @@ yt-cookies.txt
 /ios/*.xcodeproj/
 
 /ios/Riff/Info.plist
+/ios/Dependencies/
+__pycache__/
