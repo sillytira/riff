@@ -113,6 +113,8 @@ struct NowPlayingView: View {
                         }.font(.system(size: 64))
                         Button("Forward 15 seconds", systemImage: "goforward.15") { library.seek(to: library.elapsed + 15) }
                     }.font(.title).labelStyle(.iconOnly)
+                    NavigationLink("Lyrics", systemImage: "quote.bubble") { LyricsView(library: library) }
+                        .buttonStyle(.bordered)
                     if let track = library.onlineCurrent {
                         Button("Save offline", systemImage: "arrow.down.circle") { downloads.download(track, into: library) }
                             .buttonStyle(.bordered)
