@@ -8,6 +8,7 @@ struct LocalTrack: Codable, Identifiable {
     var artist: String? = nil
     var artworkURL: String? = nil
     var webpageURL: String? = nil
+    var assetRelativePath: String? = nil
 }
 
 /// Owns sandbox copies: access to the original Files provider is needed only during import.
@@ -100,6 +101,25 @@ final class AudioLibrary: NSObject, AVAudioPlayerDelegate {
         }
     }
 
+    func importHLSDownload(_ source: URL, media: ResolvedMedia) async throws {
+        guard manifestIsReadable else { throw ExtractionError(message: "The library index is unreadable; existing data was preserved.") }
+        let home = URL(filePath: NSHomeDirectory(), directoryHint: .isDirectory).standardizedFileURL.path + "/"
+        guard source.standardizedFileURL.path.hasPrefix(home) else {
+            throw ExtractionError(message: "The offline asset is outside the application sandbox.")
+        }
+        let asset = AVURLAsset(url: source)
+        guard try await asset.load(.isPlayable) else {
+            throw ExtractionError(message: "The downloaded HLS asset is not playable.")
+        }
+        let track = LocalTrack(id: UUID(), name: media.track.title, filename: source.lastPathComponent,
+                               artist: media.track.artist, artworkURL: media.track.artworkURL,
+                               webpageURL: media.track.webpageURL,
+                               assetRelativePath: String(source.standardizedFileURL.path.dropFirst(home.count)))
+        let updated = tracks + [track]
+        try JSONEncoder().encode(updated).write(to: manifest, options: .atomic)
+        tracks = updated
+    }
+
     func playOnline(_ track: OnlineTrack) async {
         let request = UUID()
         generation = request
@@ -158,6 +178,16 @@ final class AudioLibrary: NSObject, AVAudioPlayerDelegate {
             let session = AVAudioSession.sharedInstance()
             try session.setCategory(.playback, mode: .default)
             try session.setActive(true)
+            if let relative = track.assetRelativePath {
+                player?.stop()
+                player = nil
+                let source = URL(filePath: NSHomeDirectory()).appending(path: relative)
+                streamPlayer = AVPlayer(url: source)
+                current = track
+                streamPlayer?.play()
+                isPlaying = true
+                return
+            }
             let next = try AVAudioPlayer(contentsOf: directory.appending(path: track.filename))
             next.delegate = self
             guard next.prepareToPlay() else { throw PlaybackError.unavailable }

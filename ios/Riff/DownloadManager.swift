@@ -1,4 +1,5 @@
 import Foundation
+import AVFoundation
 import Observation
 
 struct DownloadJob: Identifiable {
@@ -25,8 +26,15 @@ final class DownloadManager {
                 guard let url = URL(string: media.streamURL), ["http", "https"].contains(url.scheme?.lowercased() ?? "") else {
                     throw ExtractionError(message: "The provider returned an invalid audio URL.")
                 }
-                guard !(media.protocol?.contains("m3u8") ?? false) else {
-                    throw ExtractionError(message: "This provider returned segmented audio. A direct downloadable format is required.")
+                if media.protocol?.contains("m3u8") ?? false {
+                    self.update(id, "Saving HLS audio offline…")
+                    let asset = AVURLAsset(url: url, options: ["AVURLAssetHTTPHeaderFieldsKey": media.headers])
+                    let location = try await HLSDownloader.shared.download(asset, title: track.title)
+                    try Task.checkCancellation()
+                    try await library.importHLSDownload(location, media: media)
+                    self.update(id, "Saved offline", active: false)
+                    self.tasks[id] = nil
+                    return
                 }
                 self.update(id, "Downloading…")
                 var request = URLRequest(url: url)
