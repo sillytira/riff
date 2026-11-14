@@ -15,7 +15,7 @@ Desktop baseline: ac68b13b1ee444c4b1ebd506f77da9bd1d83217a (0.7.5).
 Implemented: Files audio import with sandbox copies and decoder validation; atomic
 library manifest; restored stable track identities; local search; playback,
 pause/resume, next and automatic advance; native Liquid Glass player surface;
-Reduce Transparency support. Compilation and execution must be checked in Actions.
+Reduce Transparency support. Actions run 43617100336 passed simulator compilation, all four native library tests, device compilation and unsigned IPA packaging. No physical-device playback or visual testing has been performed.
 Background audio entitlement is configured, but interruptions, routes, lock-screen
 commands, seeking, artwork and metadata are not implemented yet. AVAudioPlayer
 format support is not equivalent to all formats supported by desktop ffmpeg.
@@ -52,3 +52,6 @@ and packages an unsigned arm64 device application as `Riff-unsigned.ipa`.
 An unsigned IPA must be signed by AltStore/SideStore before installation.
 A passing compilation alone does not establish feature parity or real-device
 playback/background correctness. Do not label this foundation a finished product.
+
+Verified build: https://github.com/sillytira/riff/actions/runs/43617100336
+Unsigned IPA artifact: https://github.com/sillytira/riff/actions/runs/43617100336/artifacts/14121979000
