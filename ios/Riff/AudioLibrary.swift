@@ -30,6 +30,7 @@ final class AudioLibrary: NSObject {
     var repeatMode: RepeatMode = .all
     private(set) var playbackQueue = PlaybackQueue()
     enum RepeatMode: String, CaseIterable { case off, all, one }
+    @ObservationIgnored private lazy var lifecycle = PlaybackLifecycle(library: self)
     @ObservationIgnored private lazy var commands = PlaybackCommands(library: self)
     @ObservationIgnored private var streamPlayer: AVPlayer?
     @ObservationIgnored private var monitor: Task<Void, Never>?
@@ -160,6 +161,7 @@ final class AudioLibrary: NSObject {
     }
 
     func playOnline(_ track: OnlineTrack, queue: [OnlineTrack]? = nil, preserveQueue: Bool = false) async {
+        _ = lifecycle
         if !preserveQueue {
             let entries = (queue ?? [track]).map { PlaylistEntry(source: .online($0)) }
             playbackQueue = PlaybackQueue(entries: entries, currentID: entries.first(where: {
@@ -213,6 +215,7 @@ final class AudioLibrary: NSObject {
     }
 
     func play(_ track: LocalTrack, preserveQueue: Bool = false) {
+        _ = lifecycle
         if !preserveQueue {
             playbackQueue = PlaybackQueue(entries: tracks.map { PlaylistEntry(id: $0.id, source: .local($0.id)) }, currentID: track.id)
         }
@@ -266,7 +269,12 @@ final class AudioLibrary: NSObject {
         }
         guard let player else { return }
         if isPlaying { player.pause(); isPlaying = false }
-        else { isPlaying = player.play() }
+        else {
+            do { try AVAudioSession.sharedInstance().setActive(true) }
+            catch { self.error = error.localizedDescription; return }
+            isPlaying = player.play()
+            if !isPlaying { error = "The audio output could not be restarted." }
+        }
         commands.update()
     }
 

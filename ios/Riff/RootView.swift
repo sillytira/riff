@@ -127,6 +127,7 @@ struct NowPlayingView: View {
                             Label("Repeat: " + library.repeatMode.rawValue, systemImage: library.repeatMode == .one ? "repeat.1" : "repeat")
                         }
                     }.labelStyle(.iconOnly).buttonStyle(.bordered)
+                    AudioRoutePicker().frame(width: 44, height: 44).accessibilityLabel("Audio output")
                     NavigationLink { AudioEditorView(library: library) } label: { Label("Audio Editor", systemImage: "waveform.path") }
                         .buttonStyle(.bordered)
                     NavigationLink { EffectsView(library: library) } label: { Label("Audio Effects", systemImage: "slider.horizontal.3") }
