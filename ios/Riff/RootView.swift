@@ -9,9 +9,8 @@ struct RootView: View {
     var body: some View {
         Group {
             if #available(iOS 26, *) {
-                tabs.tabViewBottomAccessory {
-                    if library.playingTitle != nil { miniPlayer }
-                }
+                if library.playingTitle != nil { tabs.tabViewBottomAccessory { miniPlayer } }
+                else { tabs }
             } else {
                 tabs.safeAreaInset(edge: .bottom) {
                     if library.playingTitle != nil { miniPlayer.background(.regularMaterial) }
