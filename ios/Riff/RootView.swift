@@ -128,6 +128,8 @@ struct NowPlayingView: View {
                             Label("Repeat: " + library.repeatMode.rawValue, systemImage: library.repeatMode == .one ? "repeat.1" : "repeat")
                         }
                     }.labelStyle(.iconOnly).buttonStyle(.bordered)
+                    NavigationLink { EffectsView(library: library) } label: { Label("Audio Effects", systemImage: "slider.horizontal.3") }
+                        .buttonStyle(.bordered)
                     NavigationLink { QueueView(library: library) } label: { Label("Up Next", systemImage: "list.bullet") }
                         .buttonStyle(.bordered)
                     NavigationLink { LyricsView(library: library) } label: { Label("Lyrics", systemImage: "quote.bubble") }

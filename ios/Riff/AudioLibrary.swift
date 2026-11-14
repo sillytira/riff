@@ -13,13 +13,19 @@ struct LocalTrack: Codable, Identifiable {
 
 /// Owns sandbox copies: access to the original Files provider is needed only during import.
 @MainActor @Observable
-final class AudioLibrary: NSObject, AVAudioPlayerDelegate {
+final class AudioLibrary: NSObject {
     private(set) var tracks: [LocalTrack] = []
     private(set) var current: LocalTrack?
     private(set) var isPlaying = false
     var error: String?
     private(set) var onlineCurrent: OnlineTrack?
     private(set) var isLoading = false
+    var effects = AudioEffectSettings() {
+        didSet {
+            player?.settings = effects
+            if isPlaying { streamPlayer?.rate = effects.rate }
+        }
+    }
     var shuffleEnabled = false
     var repeatMode: RepeatMode = .all
     private(set) var playbackQueue = PlaybackQueue()
@@ -48,7 +54,7 @@ final class AudioLibrary: NSObject, AVAudioPlayerDelegate {
         player?.currentTime = seconds
         commands.update()
     }
-    @ObservationIgnored private var player: AVAudioPlayer?
+    @ObservationIgnored private var player: NativeAudioPlayer?
     @ObservationIgnored private let directory: URL
     @ObservationIgnored private let manifest: URL
 
@@ -163,7 +169,8 @@ final class AudioLibrary: NSObject, AVAudioPlayerDelegate {
             let streaming = AVPlayer(playerItem: item)
             streamPlayer = streaming
             observeEnd(of: item)
-            streaming.play()
+            streaming.currentItem?.audioTimePitchAlgorithm = .spectral
+            streaming.playImmediately(atRate: effects.rate)
             isPlaying = true
             commands.update()
             monitor = Task { @MainActor [weak self] in
@@ -209,8 +216,14 @@ final class AudioLibrary: NSObject, AVAudioPlayerDelegate {
                 commands.update()
                 return
             }
-            let next = try AVAudioPlayer(contentsOf: directory.appending(path: track.filename))
-            next.delegate = self
+            let next = try NativeAudioPlayer(contentsOf: directory.appending(path: track.filename))
+            next.settings = effects
+            next.onFinish = { [weak self] in
+                guard let self else { return }
+                self.isPlaying = false
+                self.commands.update()
+                self.next(automatic: true)
+            }
             guard next.prepareToPlay() else { throw PlaybackError.unavailable }
             player?.stop()
             player = next
@@ -223,7 +236,7 @@ final class AudioLibrary: NSObject, AVAudioPlayerDelegate {
 
     func togglePlayback() {
         if let streaming = streamPlayer {
-            if isPlaying { streaming.pause() } else { streaming.play() }
+            if isPlaying { streaming.pause() } else { streaming.playImmediately(atRate: effects.rate) }
             isPlaying.toggle()
             commands.update()
             return
@@ -285,14 +298,6 @@ final class AudioLibrary: NSObject, AVAudioPlayerDelegate {
 
     func next(automatic: Bool = false) {
         if let selected = playbackQueue.advance(automatic: automatic, shuffle: shuffleEnabled, repeatMode: repeatMode.rawValue) { playEntry(selected) }
-    }
-
-    nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            self.isPlaying = false
-            if flag { self.next(automatic: true) }
-        }
     }
 
     enum PlaybackError: LocalizedError {
