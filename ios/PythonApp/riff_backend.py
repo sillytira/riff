@@ -77,8 +77,8 @@ def dispatch(request):
     operation = request.get('operation')
     if operation == 'health':
         import ssl
-        import yt_dlp.version
-        result = dict(python=os.sys.version, extractor=yt_dlp.version.__version__, tls=ssl.OPENSSL_VERSION,
+        from yt_dlp.version import __version__
+        result = dict(python=os.sys.version, extractor=__version__, tls=ssl.OPENSSL_VERSION,
                       javascript=riff_native is not None)
         if riff_native is not None:
             result['javascriptResult'] = riff_native.evaluate_js('console.log(JSON.stringify({answer: 6 * 7}))')
