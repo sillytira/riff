@@ -23,6 +23,7 @@ struct LibraryView: View {
                         Image(systemName: "play.fill").foregroundStyle(.secondary)
                     }
                 }
+                .accessibilityIdentifier("local-track-" + track.id.uuidString)
                 .listRowBackground(Color.clear)
             }
             .overlay {

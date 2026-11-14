@@ -50,8 +50,10 @@ final class AudioProcessingTests: XCTestCase {
         XCTAssertTrue(player.play())
         try await Task.sleep(for: .milliseconds(250))
         XCTAssertGreaterThan(player.currentTime, 0.05)
+        let beforePause = player.currentTime
         player.pause()
         let paused = player.currentTime
+        XCTAssertEqual(paused, beforePause, accuracy: 0.03)
         try await Task.sleep(for: .milliseconds(100))
         XCTAssertEqual(player.currentTime, paused, accuracy: 0.03)
         player.currentTime = 0.5

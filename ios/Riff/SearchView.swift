@@ -32,7 +32,7 @@ struct SearchView: View {
                             }.foregroundStyle(.primary)
                         }.buttonStyle(.plain)
                         Button("Download", systemImage: "arrow.down.circle") { downloads.download(track, into: library) }
-                            .labelStyle(.iconOnly).frame(minWidth: 44, minHeight: 44)
+                            .buttonStyle(.borderless).labelStyle(.iconOnly).frame(minWidth: 44, minHeight: 44)
                     }.listRowBackground(Color.clear)
                 }
                 .overlay {

@@ -57,6 +57,8 @@ final class NativeAudioPlayer {
     private let file: AVAudioFile
     private let graph: AudioGraph
     private var startingFrame: AVAudioFramePosition = 0
+    private var heldTime = 0.0
+    private var needsSchedule = false
     private var token = UUID()
     var onFinish: (@MainActor () -> Void)?
     var settings = AudioEffectSettings() { didSet { graph.apply(settings) } }
@@ -65,14 +67,17 @@ final class NativeAudioPlayer {
     var currentTime: Double {
         get {
             let offset: AVAudioFramePosition
-            if let render = graph.player.lastRenderTime, let time = graph.player.playerTime(forNodeTime: render) { offset = time.sampleTime }
-            else { offset = 0 }
+            if graph.player.isPlaying, let render = graph.player.lastRenderTime, let time = graph.player.playerTime(forNodeTime: render) { offset = time.sampleTime }
+            else { return heldTime }
             return min(duration, Double(startingFrame + offset) / file.processingFormat.sampleRate)
         }
         set {
             let playing = isPlaying
             schedule(from: min(duration, max(0, newValue)))
-            if playing { _ = play() }
+            if playing {
+                if startingFrame >= file.length { onFinish?() }
+                else { _ = play() }
+            }
         }
     }
 
@@ -88,13 +93,15 @@ final class NativeAudioPlayer {
     func play() -> Bool {
         do {
             if !graph.engine.isRunning { try graph.engine.start() }
-            if startingFrame >= file.length { schedule(from: 0) }
+            if needsSchedule || startingFrame >= file.length { schedule(from: 0) }
             graph.player.play()
             return true
         } catch { return false }
     }
-    func pause() { graph.player.pause() }
+    func pause() { heldTime = currentTime; graph.player.pause() }
     func stop() {
+        heldTime = currentTime
+        needsSchedule = true
         token = UUID()
         graph.player.stop()
         graph.engine.stop()
@@ -105,12 +112,16 @@ final class NativeAudioPlayer {
         token = id
         graph.player.stop()
         startingFrame = min(file.length, AVAudioFramePosition(seconds * file.processingFormat.sampleRate))
+        heldTime = Double(startingFrame) / file.processingFormat.sampleRate
+        needsSchedule = false
         let count = file.length - startingFrame
         guard count > 0 else { return }
         graph.player.scheduleSegment(file, startingFrame: startingFrame, frameCount: AVAudioFrameCount(min(count, AVAudioFramePosition(UInt32.max))), at: nil, completionCallbackType: .dataPlayedBack) { [weak self] _ in
             Task { @MainActor in
                 guard let self, self.token == id else { return }
                 self.startingFrame = self.file.length
+                self.heldTime = self.duration
+                self.needsSchedule = true
                 self.graph.player.stop()
                 self.onFinish?()
             }

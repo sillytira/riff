@@ -63,7 +63,7 @@ final class NavigationTests: XCTestCase {
         app.tabBars.buttons["Downloads"].tap()
         XCTAssertTrue(app.staticTexts["Saved offline"].waitForExistence(timeout: 30))
         app.tabBars.buttons["Library"].tap()
-        let saved = app.staticTexts["ui-tone"].firstMatch
+        let saved = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "local-track-")).firstMatch
         XCTAssertTrue(saved.waitForExistence(timeout: 10))
         saved.tap()
         app.buttons["now-playing-open"].tap()
