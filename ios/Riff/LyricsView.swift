@@ -7,6 +7,7 @@ struct LyricsView: View {
     @State private var error: String?
     @State private var loading = true
     @State private var importing = false
+    @State private var lookupID = UUID()
     @AppStorage("lyricsOffset") private var offset = 0.0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -48,12 +49,19 @@ struct LyricsView: View {
         .navigationTitle("Lyrics")
         .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Import lyrics", systemImage: "square.and.arrow.down") { importing = true } } }
         .task(id: library.playingTitle) {
+            let id = UUID()
+            lookupID = id
             loading = true
             error = nil
             document = nil
             do {
-                document = try await LyricsService.shared.lookup(title: library.playingTitle ?? "", artist: library.playingArtist, duration: library.duration)
-            } catch { self.error = error.localizedDescription }
+                let found = try await LyricsService.shared.lookup(title: library.playingTitle ?? "", artist: library.playingArtist, duration: library.duration)
+                guard !Task.isCancelled, lookupID == id else { return }
+                document = found
+            } catch {
+                guard !Task.isCancelled, lookupID == id else { return }
+                self.error = error.localizedDescription
+            }
             loading = false
         }
         .fileImporter(isPresented: $importing, allowedContentTypes: [.plainText, UTType(filenameExtension: "lrc") ?? .plainText]) { result in
@@ -61,7 +69,10 @@ struct LyricsView: View {
                 let url = try result.get()
                 let access = url.startAccessingSecurityScopedResource()
                 defer { if access { url.stopAccessingSecurityScopedResource() } }
-                document = .parse(try String(contentsOf: url, encoding: .utf8))
+                let text = try String(contentsOf: url, encoding: .utf8)
+                lookupID = UUID()
+                loading = false
+                document = .parse(text)
                 error = nil
             } catch { self.error = error.localizedDescription }
         }

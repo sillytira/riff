@@ -27,12 +27,16 @@ final class AudioLibrary: NSObject, AVAudioPlayerDelegate {
     @ObservationIgnored private lazy var commands = PlaybackCommands(library: self)
     @ObservationIgnored private var streamPlayer: AVPlayer?
     @ObservationIgnored private var monitor: Task<Void, Never>?
+    @ObservationIgnored private var endObserver: NSObjectProtocol?
     @ObservationIgnored private var generation = UUID()
     @ObservationIgnored private var manifestIsReadable = true
 
     var playingTitle: String? { current?.name ?? onlineCurrent?.title }
     var playingArtist: String { current?.artist ?? onlineCurrent?.artist ?? "" }
-    var elapsed: Double { streamPlayer?.currentTime().seconds ?? player?.currentTime ?? 0 }
+    var elapsed: Double {
+        let value = streamPlayer?.currentTime().seconds ?? player?.currentTime ?? 0
+        return value.isFinite ? max(0, value) : 0
+    }
     var duration: Double {
         let value = streamPlayer?.currentItem?.duration.seconds ?? player?.duration ?? 0
         return value.isFinite ? max(0, value) : 0
@@ -152,6 +156,7 @@ final class AudioLibrary: NSObject, AVAudioPlayerDelegate {
             let item = AVPlayerItem(asset: asset)
             let streaming = AVPlayer(playerItem: item)
             streamPlayer = streaming
+            observeEnd(of: item)
             streaming.play()
             isPlaying = true
             commands.update()
@@ -162,11 +167,6 @@ final class AudioLibrary: NSObject, AVAudioPlayerDelegate {
                     if item.status == .failed {
                         self.error = item.error?.localizedDescription ?? "The audio stream failed."
                         self.isPlaying = false
-                        return
-                    }
-                    if item.status == .readyToPlay, self.duration > 0, self.elapsed >= self.duration - 0.1 {
-                        self.isPlaying = false
-                        self.next()
                         return
                     }
                 }
@@ -191,7 +191,9 @@ final class AudioLibrary: NSObject, AVAudioPlayerDelegate {
                 player?.stop()
                 player = nil
                 let source = URL(filePath: NSHomeDirectory()).appending(path: relative)
-                streamPlayer = AVPlayer(url: source)
+                let item = AVPlayerItem(url: source)
+                streamPlayer = AVPlayer(playerItem: item)
+                observeEnd(of: item)
                 current = track
                 streamPlayer?.play()
                 isPlaying = true
@@ -221,6 +223,19 @@ final class AudioLibrary: NSObject, AVAudioPlayerDelegate {
         if isPlaying { player.pause(); isPlaying = false }
         else { isPlaying = player.play() }
         commands.update()
+    }
+
+    private func observeEnd(of item: AVPlayerItem) {
+        if let endObserver { NotificationCenter.default.removeObserver(endObserver) }
+        let active = generation
+        endObserver = NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: item, queue: .main) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, self.generation == active else { return }
+                self.isPlaying = false
+                self.commands.update()
+                self.next()
+            }
+        }
     }
 
     func previous() {
