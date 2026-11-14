@@ -21,7 +21,8 @@ final class DownloadManager {
         tasks[id] = Task { [weak self] in
             guard let self else { return }
             do {
-                let media = try await MediaExtractor.shared.resolve(track.webpageURL)
+                var media = try await MediaExtractor.shared.resolve(track.webpageURL)
+                media.track = track.enriched(with: media.track)
                 try Task.checkCancellation()
                 guard let url = URL(string: media.streamURL), ["http", "https"].contains(url.scheme?.lowercased() ?? "") else {
                     throw ExtractionError(message: "The provider returned an invalid audio URL.")

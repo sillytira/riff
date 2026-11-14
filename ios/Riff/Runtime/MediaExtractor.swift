@@ -11,8 +11,18 @@ struct OnlineTrack: Codable, Identifiable, Sendable {
     var album: String? = nil
 }
 
+extension OnlineTrack {
+    func enriched(with details: OnlineTrack) -> OnlineTrack {
+        OnlineTrack(id: id, title: title.isEmpty ? details.title : title,
+                    artist: artist.isEmpty ? details.artist : artist, webpageURL: webpageURL,
+                    artworkURL: details.artworkURL ?? artworkURL,
+                    duration: details.duration ?? duration, provider: provider,
+                    album: album ?? details.album)
+    }
+}
+
 struct ResolvedMedia: Decodable, Sendable {
-    let track: OnlineTrack
+    var track: OnlineTrack
     let streamURL: String
     let headers: [String: String]
     let ext: String?

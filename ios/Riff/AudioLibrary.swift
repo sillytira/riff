@@ -212,6 +212,7 @@ final class AudioLibrary: NSObject {
         do {
             let media = try await MediaExtractor.shared.resolve(track.webpageURL)
             guard generation == request else { return }
+            onlineCurrent = track.enriched(with: media.track)
             try Task.checkCancellation()
             guard let url = URL(string: media.streamURL), ["http", "https"].contains(url.scheme?.lowercased() ?? "") else {
                 throw ExtractionError(message: "The provider returned an invalid audio URL.")
