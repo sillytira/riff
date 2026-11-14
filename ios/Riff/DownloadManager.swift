@@ -23,6 +23,12 @@ final class DownloadManager {
             do {
                 var media = try await MediaExtractor.shared.resolve(track.webpageURL)
                 media.track = track.enriched(with: media.track)
+                let coverURL = media.track.artworkURL
+                let cover = Task { () -> Data? in
+                    guard let coverURL else { return nil }
+                    return try? await ArtworkCache.shared.imageData(for: coverURL)
+                }
+                defer { cover.cancel() }
                 try Task.checkCancellation()
                 guard let url = URL(string: media.streamURL), ["http", "https"].contains(url.scheme?.lowercased() ?? "") else {
                     throw ExtractionError(message: "The provider returned an invalid audio URL.")
@@ -38,6 +44,7 @@ final class DownloadManager {
                         try? FileManager.default.removeItem(at: location)
                         throw error
                     }
+                    _ = await cover.value
                     self.update(id, "Saved offline", active: false)
                     self.tasks[id] = nil
                     return
@@ -53,6 +60,7 @@ final class DownloadManager {
                 }
                 try Task.checkCancellation()
                 try library.importDownload(file, media: media)
+                _ = await cover.value
                 self.update(id, "Saved offline", active: false)
             } catch is CancellationError {
                 self.update(id, "Cancelled", active: false)

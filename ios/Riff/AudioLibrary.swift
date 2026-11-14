@@ -3,12 +3,15 @@ import Observation
 
 struct LocalTrack: Codable, Identifiable {
     let id: UUID
-    let name: String
+    var name: String
     let filename: String
     var artist: String? = nil
     var artworkURL: String? = nil
     var webpageURL: String? = nil
     var assetRelativePath: String? = nil
+    var album: String? = nil
+    var duration: Double? = nil
+    var metadataIndexed: Bool? = nil
 }
 
 /// Owns sandbox copies: access to the original Files provider is needed only during import.
@@ -59,6 +62,10 @@ final class AudioLibrary: NSObject {
     }
     @ObservationIgnored private var player: NativeAudioPlayer?
     @ObservationIgnored private let directory: URL
+    private struct MetadataJob { let id: UUID; let url: URL }
+    @ObservationIgnored private var metadataJobs: [MetadataJob] = []
+    @ObservationIgnored private var metadataCursor = 0
+    @ObservationIgnored private var metadataWorker: Task<Void, Never>?
     @ObservationIgnored private let effectsFile: URL
     @ObservationIgnored private var effectsWritable = true
     @ObservationIgnored private let manifest: URL
@@ -91,6 +98,44 @@ final class AudioLibrary: NSObject {
                 effects = saved
             }
         } catch { self.error = error.localizedDescription; effectsWritable = false }
+        for track in tracks where track.metadataIndexed != true && track.assetRelativePath == nil {
+            enqueueMetadata(id: track.id, url: root.appending(path: track.filename))
+        }
+    }
+
+    private func enqueueMetadata(id: UUID, url: URL) {
+        metadataJobs.append(MetadataJob(id: id, url: url))
+        guard metadataWorker == nil else { return }
+        metadataWorker = Task { @MainActor [weak self] in
+            guard let self else { return }
+            while self.metadataCursor < self.metadataJobs.count {
+                let job = self.metadataJobs[self.metadataCursor]
+                self.metadataCursor += 1
+                do {
+                    let metadata = try await LocalMetadataReader.shared.read(job.url)
+                    var artwork: String?
+                    if let data = metadata.artwork { artwork = try? await ArtworkCache.shared.storeEmbedded(data, identity: job.id.uuidString) }
+                    guard self.manifestIsReadable, let index = self.tracks.firstIndex(where: { $0.id == job.id }) else { continue }
+                    var updated = self.tracks
+                    if updated[index].webpageURL == nil {
+                        if let title = metadata.title, !title.isEmpty { updated[index].name = title }
+                        if let artist = metadata.artist, !artist.isEmpty { updated[index].artist = artist }
+                    }
+                    if updated[index].artworkURL == nil { updated[index].artworkURL = artwork }
+                    if updated[index].album == nil { updated[index].album = metadata.album }
+                    updated[index].duration = metadata.duration ?? updated[index].duration
+                    updated[index].metadataIndexed = metadata.artwork == nil || artwork != nil
+                    try JSONEncoder().encode(updated).write(to: self.manifest, options: .atomic)
+                    self.tracks = updated
+                    if self.current?.id == job.id { self.current = updated[index]; self.commands.update() }
+                } catch {
+                    // Keep the original playable entry and retry indexing on a later launch.
+                }
+            }
+            self.metadataJobs.removeAll(keepingCapacity: true)
+            self.metadataCursor = 0
+            self.metadataWorker = nil
+        }
     }
 
     func resetEffects() {
@@ -120,6 +165,7 @@ final class AudioLibrary: NSObject {
                 let updated = tracks + [track]
                 try JSONEncoder().encode(updated).write(to: manifest, options: .atomic)
                 tracks = updated
+                enqueueMetadata(id: id, url: destination)
             } catch {
                 try? FileManager.default.removeItem(at: destination)
                 self.error = "Could not import \(source.lastPathComponent): \(error.localizedDescription)"
@@ -141,6 +187,7 @@ final class AudioLibrary: NSObject {
             let updated = tracks + [track]
             try JSONEncoder().encode(updated).write(to: manifest, options: .atomic)
             tracks = updated
+            enqueueMetadata(id: id, url: destination)
         } catch {
             try? FileManager.default.removeItem(at: destination)
             throw error

@@ -7,7 +7,9 @@ struct LibraryView: View {
     @State private var query = ""
 
     private var matches: [LocalTrack] {
-        query.isEmpty ? library.tracks : library.tracks.filter { $0.name.localizedStandardContains(query) }
+        query.isEmpty ? library.tracks : library.tracks.filter {
+            $0.name.localizedStandardContains(query) || ($0.artist?.localizedStandardContains(query) ?? false) || ($0.album?.localizedStandardContains(query) ?? false)
+        }
     }
 
     var body: some View {
@@ -15,10 +17,11 @@ struct LibraryView: View {
             List(matches) { track in
                 Button { library.play(track) } label: {
                     HStack(spacing: 16) {
-                        Image(systemName: library.current?.id == track.id ? "waveform" : "music.note")
-                            .font(.title2).frame(width: 44, height: 44)
-                            .background(.purple.opacity(0.12), in: .rect(cornerRadius: 12))
-                        Text(track.name).foregroundStyle(.primary)
+                        TrackArtwork(url: track.artworkURL, size: 52)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(track.name).font(.headline).foregroundStyle(.primary)
+                            if let artist = track.artist, !artist.isEmpty { Text(artist).font(.caption).foregroundStyle(.secondary) }
+                        }
                         Spacer()
                         Image(systemName: "play.fill").foregroundStyle(.secondary)
                     }

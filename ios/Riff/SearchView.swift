@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct SearchView: View {
     let library: AudioLibrary
@@ -79,17 +80,29 @@ struct SearchView: View {
 struct TrackArtwork: View {
     let url: String?
     let size: CGFloat
+    @Environment(\.displayScale) private var displayScale
+    @State private var imageData: Data?
+    private struct Request: Hashable { let url: String?; let pixels: Int }
     var body: some View {
-        AsyncImage(url: url.flatMap(URL.init(string:))) { image in
-            image.resizable().scaledToFill()
-        } placeholder: {
-            ZStack {
-                LinearGradient(colors: [.purple.opacity(0.7), .indigo], startPoint: .topLeading, endPoint: .bottomTrailing)
-                Image(systemName: "music.note").font(.system(size: size * 0.3)).foregroundStyle(.white)
+        Group {
+            if let imageData, let image = UIImage(data: imageData) {
+                Image(uiImage: image).resizable().scaledToFill()
+            } else {
+                ZStack {
+                    LinearGradient(colors: [.purple.opacity(0.7), .indigo], startPoint: .topLeading, endPoint: .bottomTrailing)
+                    Image(systemName: "music.note").font(.system(size: size * 0.3)).foregroundStyle(.white)
+                }
             }
         }
         .frame(width: size, height: size)
         .clipShape(.rect(cornerRadius: min(24, size * 0.18)))
         .accessibilityHidden(true)
+        .task(id: Request(url: url, pixels: Int(size * displayScale))) {
+            imageData = nil
+            guard let url else { return }
+            let data = try? await ArtworkCache.shared.imageData(for: url, pixelSize: Int(size * displayScale))
+            guard !Task.isCancelled else { return }
+            imageData = data
+        }
     }
 }
