@@ -8,9 +8,12 @@ struct RootView: View {
 
     var body: some View {
         Group {
-            if #available(iOS 26, *) {
-                if library.playingTitle != nil { tabs.tabViewBottomAccessory { miniPlayer } }
-                else { tabs }
+            if #available(iOS 26.1, *) {
+                tabs.tabViewBottomAccessory(isEnabled: library.playingTitle != nil) { miniPlayer }
+            } else if #available(iOS 26, *) {
+                tabs.safeAreaInset(edge: .bottom) {
+                    if library.playingTitle != nil { miniPlayer.glassEffect(.regular, in: .capsule).padding(.horizontal) }
+                }
             } else {
                 tabs.safeAreaInset(edge: .bottom) {
                     if library.playingTitle != nil { miniPlayer.background(.regularMaterial) }

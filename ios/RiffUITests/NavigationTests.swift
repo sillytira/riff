@@ -69,6 +69,10 @@ final class NavigationTests: XCTestCase {
         app.buttons["now-playing-open"].tap()
         XCTAssertTrue(app.navigationBars["Now Playing"].waitForExistence(timeout: 10))
         attach(app, name: "Now Playing")
+        for _ in 0..<3 {
+            if app.buttons["Audio Editor"].isHittable { break }
+            app.swipeUp()
+        }
         app.buttons["Audio Editor"].tap()
         XCTAssertTrue(app.navigationBars["Audio Editor"].waitForExistence(timeout: 10))
         app.buttons["Save selection as WAV"].tap()
