@@ -2,6 +2,7 @@ import SwiftUI
 
 struct RootView: View {
     let library: AudioLibrary
+    @State private var playlists = PlaylistStore()
     @State private var downloads = DownloadManager()
     @State private var showPlayer = false
 
@@ -26,6 +27,7 @@ struct RootView: View {
     private var tabs: some View {
         TabView {
             Tab("Library", systemImage: "music.note.house") { LibraryView(library: library) }
+            Tab("Playlists", systemImage: "music.note.list") { PlaylistsView(store: playlists, library: library) }
             Tab("Discover", systemImage: "magnifyingglass") { SearchView(library: library, downloads: downloads) }
             Tab("Downloads", systemImage: "arrow.down.circle") { DownloadsView(downloads: downloads) }
         }
@@ -126,6 +128,8 @@ struct NowPlayingView: View {
                             Label("Repeat: " + library.repeatMode.rawValue, systemImage: library.repeatMode == .one ? "repeat.1" : "repeat")
                         }
                     }.labelStyle(.iconOnly).buttonStyle(.bordered)
+                    NavigationLink { QueueView(library: library) } label: { Label("Up Next", systemImage: "list.bullet") }
+                        .buttonStyle(.bordered)
                     NavigationLink { LyricsView(library: library) } label: { Label("Lyrics", systemImage: "quote.bubble") }
                         .buttonStyle(.bordered)
                     if let track = library.onlineCurrent {

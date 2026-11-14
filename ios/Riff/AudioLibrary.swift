@@ -22,7 +22,7 @@ final class AudioLibrary: NSObject, AVAudioPlayerDelegate {
     private(set) var isLoading = false
     var shuffleEnabled = false
     var repeatMode: RepeatMode = .all
-    private(set) var onlineQueue: [OnlineTrack] = []
+    private(set) var playbackQueue = PlaybackQueue()
     enum RepeatMode: String, CaseIterable { case off, all, one }
     @ObservationIgnored private lazy var commands = PlaybackCommands(library: self)
     @ObservationIgnored private var streamPlayer: AVPlayer?
@@ -130,8 +130,14 @@ final class AudioLibrary: NSObject, AVAudioPlayerDelegate {
         tracks = updated
     }
 
-    func playOnline(_ track: OnlineTrack, queue: [OnlineTrack]? = nil) async {
-        if let queue { onlineQueue = queue }
+    func playOnline(_ track: OnlineTrack, queue: [OnlineTrack]? = nil, preserveQueue: Bool = false) async {
+        if !preserveQueue {
+            let entries = (queue ?? [track]).map { PlaylistEntry(source: .online($0)) }
+            playbackQueue = PlaybackQueue(entries: entries, currentID: entries.first(where: {
+                if case .online(let item) = $0.source { return item.webpageURL == track.webpageURL }
+                return false
+            })?.id)
+        }
         let request = UUID()
         generation = request
         monitor?.cancel()
@@ -176,7 +182,10 @@ final class AudioLibrary: NSObject, AVAudioPlayerDelegate {
         }
     }
 
-    func play(_ track: LocalTrack) {
+    func play(_ track: LocalTrack, preserveQueue: Bool = false) {
+        if !preserveQueue {
+            playbackQueue = PlaybackQueue(entries: tracks.map { PlaylistEntry(id: $0.id, source: .local($0.id)) }, currentID: track.id)
+        }
         generation = UUID()
         monitor?.cancel()
         streamPlayer?.pause()
@@ -233,44 +242,56 @@ final class AudioLibrary: NSObject, AVAudioPlayerDelegate {
                 guard let self, self.generation == active else { return }
                 self.isPlaying = false
                 self.commands.update()
-                self.next()
+                self.next(automatic: true)
             }
+        }
+    }
+
+    func playPlaylist(_ entries: [PlaylistEntry], startingAt id: UUID) {
+        guard let selected = entries.first(where: { $0.id == id }) else { return }
+        playbackQueue = PlaybackQueue(entries: entries, currentID: id)
+        playEntry(selected)
+    }
+
+    func moveQueue(from offsets: IndexSet, to destination: Int) {
+        playbackQueue.entries = movingEntries(playbackQueue.entries, from: offsets, to: destination)
+    }
+
+    func removeQueue(offsets: IndexSet) {
+        playbackQueue.entries = playbackQueue.entries.enumerated().filter { !offsets.contains($0.offset) }.map(\.element)
+    }
+
+    func title(for source: PlaylistSource) -> String {
+        switch source {
+        case .local(let id): tracks.first(where: { $0.id == id })?.name ?? "Unavailable local track"
+        case .online(let track): track.title
+        }
+    }
+
+    private func playEntry(_ entry: PlaylistEntry) {
+        switch entry.source {
+        case .local(let id):
+            guard let track = tracks.first(where: { $0.id == id }) else { error = "This local track is no longer in your library."; return }
+            play(track, preserveQueue: true)
+        case .online(let track):
+            Task { await playOnline(track, preserveQueue: true) }
         }
     }
 
     func previous() {
         if elapsed > 3 { seek(to: 0); return }
-        if let current, let index = tracks.firstIndex(where: { $0.id == current.id }), !tracks.isEmpty {
-            play(tracks[(index - 1 + tracks.count) % tracks.count])
-        } else if let current = onlineCurrent, let index = onlineQueue.firstIndex(where: { $0.webpageURL == current.webpageURL }), !onlineQueue.isEmpty {
-            let track = onlineQueue[(index - 1 + onlineQueue.count) % onlineQueue.count]
-            Task { await playOnline(track) }
-        }
+        if let selected = playbackQueue.previous(repeatMode: repeatMode.rawValue) { playEntry(selected) }
     }
 
-    func next() {
-        if let current, let index = tracks.firstIndex(where: { $0.id == current.id }), !tracks.isEmpty {
-            if repeatMode == .one { play(current); return }
-            if shuffleEnabled, let next = tracks.filter({ $0.id != current.id }).randomElement() { play(next); return }
-            guard index + 1 < tracks.count || repeatMode == .all else { return }
-            play(tracks[(index + 1) % tracks.count])
-        } else if let current = onlineCurrent, let index = onlineQueue.firstIndex(where: { $0.webpageURL == current.webpageURL }), !onlineQueue.isEmpty {
-            let selected: OnlineTrack
-            if repeatMode == .one { selected = current }
-            else if shuffleEnabled, let random = onlineQueue.filter({ $0.webpageURL != current.webpageURL }).randomElement() { selected = random }
-            else {
-                guard index + 1 < onlineQueue.count || repeatMode == .all else { return }
-                selected = onlineQueue[(index + 1) % onlineQueue.count]
-            }
-            Task { await playOnline(selected) }
-        }
+    func next(automatic: Bool = false) {
+        if let selected = playbackQueue.advance(automatic: automatic, shuffle: shuffleEnabled, repeatMode: repeatMode.rawValue) { playEntry(selected) }
     }
 
     nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
         Task { @MainActor [weak self] in
             guard let self else { return }
             self.isPlaying = false
-            if flag { self.next() }
+            if flag { self.next(automatic: true) }
         }
     }
 
