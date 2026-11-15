@@ -71,4 +71,30 @@ final class AudioLibraryTests: XCTestCase {
         XCTAssertEqual(library.tracks.first?.id, track.id)
         XCTAssertEqual(library.tracks.first?.name, "Song")
     }
+    func testOnlineSelectionUsesSavedAudioWithoutExtractionAndPreservesQueue() async throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let fixture = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "ui-session", withExtension: "m4a"))
+        let library = AudioLibrary(root: root)
+        defer { library.stop() }
+        // These URLs cannot resolve. Successful playback proves the saved copy was used.
+        let original = OnlineTrack(id: "offline", title: "Saved song", artist: "Riff", webpageURL: "https://www.youtube.com/watch?v=abcdefghijk", artworkURL: nil, duration: 180, provider: "YouTube")
+        let alias = OnlineTrack(id: "alias", title: "Saved song", artist: "Riff", webpageURL: "https://music.youtube.com/watch?v=abcdefghijk", artworkURL: nil, duration: 180, provider: "YouTube Music")
+        let next = OnlineTrack(id: "next", title: "Next song", artist: "Riff", webpageURL: "https://example.invalid/next", artworkURL: nil, duration: 180, provider: "Generic")
+        try library.importDownload(fixture, media: ResolvedMedia(track: original, streamURL: "", headers: [:], ext: "m4a", protocol: "https"))
+        let saved = try XCTUnwrap(library.tracks.first)
+        XCTAssertTrue(library.hasOfflineSource(alias.webpageURL))
+        await library.playOnline(alias, queue: [alias, next], startingAt: 12)
+        XCTAssertEqual(library.current?.id, saved.id)
+        XCTAssertTrue(library.isPlaying)
+        XCTAssertNil(library.onlineCurrent)
+        XCTAssertEqual(library.elapsed, 12, accuracy: 1)
+        XCTAssertEqual(library.playbackQueue.entries.count, 2)
+        XCTAssertEqual(library.playbackQueue.currentID, library.playbackQueue.entries.first?.id)
+        XCTAssertNil(library.error)
+        library.stop()
+        try FileManager.default.removeItem(at: root.appending(path: saved.filename))
+        XCTAssertFalse(library.hasOfflineSource(alias.webpageURL))
+    }
+
 }

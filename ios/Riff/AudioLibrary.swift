@@ -15,6 +15,7 @@ struct LocalTrack: Codable, Identifiable, Sendable {
     var sourceProvider: String? = nil
     var playbackFilename: String? = nil
     var metadataCustomized: Bool? = nil
+    var downloadJobID: UUID? = nil
 
     var onlineEquivalent: OnlineTrack? {
         guard let webpageURL, let url = URL(string: webpageURL), ["https", "http"].contains(url.scheme?.lowercased() ?? "") else { return nil }
@@ -209,8 +210,9 @@ final class AudioLibrary: NSObject {
         }
     }
 
-    func importDownload(_ source: URL, media: ResolvedMedia) throws {
+    func importDownload(_ source: URL, media: ResolvedMedia, downloadJobID: UUID? = nil) throws {
         guard manifestIsReadable else { throw ExtractionError(message: "The library index is unreadable; existing data was preserved.") }
+        if let downloadJobID, tracks.contains(where: { $0.downloadJobID == downloadJobID }) { return }
         let id = UUID()
         let ext = (media.ext ?? "m4a").filter { $0.isLetter || $0.isNumber }
         let filename = id.uuidString + "." + ext
@@ -219,7 +221,8 @@ final class AudioLibrary: NSObject {
             try FileManager.default.copyItem(at: source, to: destination)
             _ = try AVAudioPlayer(contentsOf: destination)
             var track = LocalTrack(id: id, name: media.track.title, filename: filename, artist: media.track.artist,
-                                   artworkURL: media.track.artworkURL, webpageURL: media.track.webpageURL)
+                                   artworkURL: media.track.artworkURL, webpageURL: media.track.webpageURL.isEmpty ? nil : media.track.webpageURL)
+            track.downloadJobID = downloadJobID
             track.album = media.track.album
             track.duration = media.track.duration
             track.sourceProvider = media.track.provider
@@ -331,6 +334,18 @@ final class AudioLibrary: NSObject {
         }
     }
 
+    func offlineTrack(for source: String) -> LocalTrack? {
+        guard !source.isEmpty else { return nil }
+        let key = downloadSourceKey(source)
+        return tracks.first { track in
+            guard let url = track.webpageURL, downloadSourceKey(url) == key,
+                  let files = try? ownedFiles(for: track), !files.isEmpty else { return false }
+            return files.allSatisfy { FileManager.default.fileExists(atPath: $0.path) }
+        }
+    }
+
+    func hasOfflineSource(_ source: String) -> Bool { offlineTrack(for: source) != nil }
+
     func originalURL(for track: LocalTrack) -> URL? {
         guard track.assetRelativePath == nil else { return nil }
         return directory.appending(path: track.filename)
@@ -368,8 +383,9 @@ final class AudioLibrary: NSObject {
         }
     }
 
-    func importHLSDownload(_ source: URL, media: ResolvedMedia) async throws {
+    func importHLSDownload(_ source: URL, media: ResolvedMedia, downloadJobID: UUID? = nil) async throws {
         guard manifestIsReadable else { throw ExtractionError(message: "The library index is unreadable; existing data was preserved.") }
+        if let downloadJobID, tracks.contains(where: { $0.downloadJobID == downloadJobID }) { return }
         let home = URL(filePath: NSHomeDirectory(), directoryHint: .isDirectory).resolvingSymlinksInPath().path + "/"
         guard source.resolvingSymlinksInPath().path.hasPrefix(home) else {
             throw ExtractionError(message: "The offline asset is outside the application sandbox.")
@@ -378,10 +394,13 @@ final class AudioLibrary: NSObject {
         guard try await asset.load(.isPlayable) else {
             throw ExtractionError(message: "The downloaded HLS asset is not playable.")
         }
+        try Task.checkCancellation()
+        if let downloadJobID, tracks.contains(where: { $0.downloadJobID == downloadJobID }) { return }
         var track = LocalTrack(id: UUID(), name: media.track.title, filename: source.lastPathComponent,
                                artist: media.track.artist, artworkURL: media.track.artworkURL,
-                               webpageURL: media.track.webpageURL,
+                               webpageURL: media.track.webpageURL.isEmpty ? nil : media.track.webpageURL,
                                assetRelativePath: String(source.resolvingSymlinksInPath().path.dropFirst(home.count)))
+        track.downloadJobID = downloadJobID
         track.album = media.track.album
         track.duration = media.track.duration
         track.sourceProvider = media.track.provider
@@ -399,6 +418,11 @@ final class AudioLibrary: NSObject {
                 if case .online(let item) = $0.source { return item.webpageURL == track.webpageURL }
                 return false
             })?.id)
+        }
+        if let saved = offlineTrack(for: track.webpageURL) {
+            play(saved, preserveQueue: true)
+            if position > 0 { seek(to: position) }
+            return
         }
         let request = UUID()
         generation = request

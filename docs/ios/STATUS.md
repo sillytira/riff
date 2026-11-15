@@ -21,6 +21,9 @@ Draft PR: https://github.com/sillytira/riff/pull/1
 - In-process Apple JavaScriptCore challenge provider for yt-dlp EJS.
 - YouTube/YouTube Music/SoundCloud search, URL resolution and AVPlayer streaming.
 - Direct HTTP downloads with decode validation and offline library persistence.
+- Protected persistent download jobs, progress, pause/resume, background transfer
+  callbacks and relaunch receipts with exactly-once library import IDs.
+- Offline-first playback of saved online songs with queue order preserved.
 - Native AVAssetDownloadURLSession HLS downloads, preserving system-managed asset locations.
 - Offline HLS playback through AVPlayer. Needs real-device verification.
 - Editable mixed local/online playback queues, persistent editable playlists,
@@ -44,15 +47,16 @@ Draft PR: https://github.com/sillytira/riff/pull/1
 
 ## Evidence obtained
 
-Latest fully passing native app build: https://github.com/sillytira/riff/actions/runs/43680430624
-The same streaming app source passed run 43678983113 with all 42 native tests,
-all six UI tests, device compilation and IPA packaging.
-Unsigned IPA: https://github.com/sillytira/riff/actions/runs/43678983113/artifacts/14147663272
-Source is merged into `ios/liquid-glass` (4ff2cd0). Validation covers Library/Now
-Playing artwork, lock-screen artwork data, Favorites after relaunch, lyric matching,
-native DSP, streaming PCM/seek, TLS rejection, credential scoping, offline playback,
-waveform export, metadata editing and safe deletion. Cover screenshots were
-visually inspected on the iPhone 17 Pro simulator, iOS 26.2.
+Latest fully passing native app build: https://github.com/sillytira/riff/actions/runs/43693993803
+Unsigned IPA: https://github.com/sillytira/riff/actions/runs/43693993803/artifacts/14154795143
+This run passed all 47 native tests, all six UI tests, device compilation and IPA
+packaging. Its source (a1c7a5a) is merged into `ios/liquid-glass`. Validation includes
+actual OS background transfers, persistent jobs/recovery, offline-first selection
+and queue preservation, in addition to the prior streaming/artwork/editor checks.
+
+Prior streaming integration run 43678983113 passed 42 native and six UI tests;
+consolidation run 43680430624 also passed. Cover screenshots were visually inspected
+on the iPhone 17 Pro simulator, iOS 26.2. Updated phone confirmation is pending.
 
 The user sideloaded older run 43621684813 and confirmed music playback but missing
 covers. Their screenshots show a mashup with a placeholder and no matching lyrics.
@@ -85,15 +89,19 @@ HLS packages still use AVPlayer and support speed only.
 pause/resume, relaunch receipts, exactly-once import IDs and offline-first song
 selection. Foreground recovery passed; the real background-session test exposed
 NSURLErrorDomain -1 and XPC errors 4097/4099 when simulator apps were unsigned.
-Ad hoc simulator signing resolved service access. Run 43693993803 passed native
-validation and is running UI tests. The device IPA remains unsigned for sideloading.
+Ad hoc simulator signing resolved service access. Run 43693993803 passed all 47
+native and six UI tests plus device IPA packaging; this source is now merged.
+The device IPA remains unsigned for sideloading.
 
 `ios/portable-playlists` combines these changes with system/light/dark appearance,
 preset/custom accents, persisted shuffle/repeat preferences, Favorites/history
 matching between online and saved copies, desktop playlist JSON import/export,
 retained local-file references, and an adaptive Now Playing glass control layout.
-Run 43694052421 passed native validation and is running UI tests. These changes
-are not yet merged into the main development branch.
+Run 43694052421 passed native validation and six of eight UI tests, including
+pause/relaunch/resume and streaming/editor flows. The two failures exposed missing
+picker accessibility values and a removal-confirmation selector race. Commit
+312bd22 adds explicit accessibility values and a distinct confirmation identifier;
+revalidation is running. These changes are not yet merged.
 
 `ios/local-decoders` adds local in-process Vorbis/Opus decoding, metadata/artwork
 access and bounded PCM playback. Linux checks passed local OGG/Opus/FLAC decoding,
@@ -150,7 +158,9 @@ send private cookies or passwords through chat; implement local account handling
 4. Finish Spotify/Apple/Deezer/etc. playlist migration and account library flows.
    Current public import delegates to yt-dlp, which does not cover every original
    metadata-only provider. Do not claim those providers work yet.
-5. Finish account/library backup and restore, download progress/recovery and duplicate handling.
+5. Finish account/library backup and restore. Download progress/recovery is
+   integrated; verify lifecycle behavior on a physical device and complete the
+   remaining source-identity matching checks on the combined branch.
 6. Complete interruption/route/background download relaunch recovery and verify
    Now Playing artwork on a physical device. Current lifecycle handling
    compiles and has service tests, but phone-call/background behavior is unverified.
