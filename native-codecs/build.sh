@@ -35,7 +35,9 @@ build_target() {
   flags="-arch $arch -isysroot $sysroot $minimum -O2 -fPIC"
   (
     cd "$work/lame"
-    CC="$compiler" CFLAGS="$flags -std=gnu89" LDFLAGS="$flags" "$RIFF_CODEC_BUILD/sources/lame/configure" \
+    # LAME's generated Autoconf predates modern Clang header probes. All Apple
+    # SDKs supply the ANSI C headers; cache this platform fact for cross builds.
+    ac_cv_header_stdc=yes CC="$compiler" CFLAGS="$flags -std=gnu89" LDFLAGS="$flags" "$RIFF_CODEC_BUILD/sources/lame/configure" \
       --host=aarch64-apple-darwin --prefix="$prefix" --enable-static --disable-shared \
       --disable-frontend --disable-decoder --disable-dependency-tracking
     make -j3
