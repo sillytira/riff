@@ -1,3 +1,4 @@
+import AVFoundation
 import XCTest
 @testable import Riff
 
@@ -24,6 +25,66 @@ final class LocalDecoderTests: XCTestCase {
             XCTAssertEqual(indexed.title, metadata.title)
             XCTAssertEqual(indexed.artwork, metadata.artwork)
         }
+    }
+
+    func testVorbisImportArtworkPlaybackAndRelaunchNeedNoDecodedCopy() async throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let input = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "tagged", withExtension: "ogg"))
+        let library = AudioLibrary(root: root)
+        await library.importFiles([input])
+        XCTAssertNil(library.error)
+        for _ in 0..<100 {
+            if library.tracks.first?.artworkURL != nil { break }
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        let track = try XCTUnwrap(library.tracks.first)
+        XCTAssertEqual(track.name, "Local Decoder Song")
+        XCTAssertEqual(track.artist, "Riff")
+        XCTAssertNotNil(track.artworkURL)
+        XCTAssertNil(track.playbackFilename)
+        XCTAssertFalse(try FileManager.default.contentsOfDirectory(atPath: root.path).contains { $0.hasSuffix("-decoded.wav") })
+        let restored = AudioLibrary(root: root)
+        restored.repeatMode = .off
+        restored.effects.pitch = 2
+        restored.play(track, startingAt: 0.7)
+        defer { restored.stop() }
+        for _ in 0..<100 {
+            if restored.isPlaying || restored.error != nil { break }
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        XCTAssertNil(restored.error)
+        XCTAssertTrue(restored.isPlaying)
+        XCTAssertGreaterThanOrEqual(restored.elapsed, 0.7)
+        XCTAssertEqual(restored.current?.id, track.id)
+        restored.togglePlayback()
+        XCTAssertFalse(restored.isPlaying)
+        restored.togglePlayback()
+        XCTAssertTrue(restored.isPlaying)
+    }
+
+    func testVorbisEditorUsesDisposableAudioAndExportsPlayableOpusWithoutProxy() async throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let input = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "tagged", withExtension: "ogg"))
+        let originalBytes = try Data(contentsOf: input)
+        let source = try await EditorAudioSource.shared.prepare(input)
+        defer { source.removeTemporaryFiles() }
+        let output = root.appending(path: "trim.wav"), encoded = root.appending(path: "trim.opus")
+        try await AudioProcessor.shared.exportWAV(input: source.url, output: output, start: 0.3, end: 1.5, settings: AudioEffectSettings())
+        let wav = try AVAudioFile(forReading: output)
+        XCTAssertEqual(Double(wav.length) / wav.processingFormat.sampleRate, 1.2, accuracy: 0.05)
+        try await CodecService.shared.convert(input: output, output: encoded, format: .opus)
+        let library = AudioLibrary(root: root.appending(path: "library"))
+        let original = LocalTrack(id: UUID(), name: "Song", filename: "original.ogg")
+        try await library.importEditedFile(encoded, original: original)
+        let track = try XCTUnwrap(library.tracks.first)
+        XCTAssertNil(track.playbackFilename)
+        XCTAssertTrue(track.filename.hasSuffix(".opus"))
+        XCTAssertEqual(try Data(contentsOf: input), originalBytes)
+        source.removeTemporaryFiles()
+        if let temporary = source.temporaryDirectory { XCTAssertFalse(FileManager.default.fileExists(atPath: temporary.path)) }
     }
 
     func testLocalDecoderRejectsDirectoriesAndNetworkPlaylists() async throws {
