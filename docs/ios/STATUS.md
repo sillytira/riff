@@ -14,7 +14,7 @@ Draft PR: https://github.com/sillytira/riff/pull/1
 
 - Native SwiftUI library, provider search, download queue, full player and mini-player.
 - Persistent Favorites and Recently Played for local/online songs, with favorites
-  accessible from Library, song menus and the player navigation bar (pending CI).
+  accessible from Library, song menus and the player navigation bar.
 - Native iOS 26 glass tab accessory and system navigation; iOS 18 material fallback.
 - Files audio import, sandbox copies, atomic library storage, restored identities.
 - Embedded CPython 3.13 and yt-dlp 2026.10.26; no companion server or subprocess.
@@ -41,28 +41,30 @@ Draft PR: https://github.com/sillytira/riff/pull/1
 
 ## Evidence obtained
 
-Latest fully passing native build: https://github.com/sillytira/riff/actions/runs/43627166211
-This built the simulator/device app and IPA, passed native and UI tests, and
-includes YouTube cookie import/sign-in controls, Keychain storage, embedded tag
-and cover indexing, and persistent artwork. Run 43624155553 also passed its
-search -> stream -> download -> offline playback -> editor -> saved edit ->
-relaunch UI flow. Earlier runs validated DSP output (EQ, independent pitch/rate,
-sample-exact trimming), queue navigation and persistent playlists/effect settings.
+Latest fully passing native app build: https://github.com/sillytira/riff/actions/runs/43671585572
+Unsigned IPA: https://github.com/sillytira/riff/actions/runs/43671585572/artifacts/14145321440
+This run passed all 30 native tests, all five UI tests, device compilation and IPA
+packaging. It validates covers in Library/Now Playing, lock-screen artwork data,
+Favorites after relaunch, lyric recording matching/offset persistence, native DSP,
+queue/playlist/effect storage and search -> streaming -> download -> offline local
+playback -> waveform editor -> saved edit -> relaunch. Latest cover screenshots
+were downloaded and visually inspected (iPhone 17 Pro simulator, iOS 26.2).
 
-The user sideloaded run 43621684813 and confirmed music works, but reported
-missing covers. Their screenshots show a mashup playing with a placeholder and
-no matching lyrics. New source adds legacy YouTube/SoundCloud cover recovery,
-lock-screen artwork, manual lyric search, remix-aware matching, offline lyrics
-and per-song timing offsets. Embedded and local artwork tests passed. Subsequent
-runs failed a remote-cover test; the most recent failure was a Swift isolation
-trap in the lock-screen artwork callback, identified from the crash report.
-Commit f180497 explicitly makes system callbacks Sendable. Run 43669795963
-passed all 28 native tests and four of five UI tests, including downloading a
-tagged audio file and showing its embedded cover in both Library and Now Playing.
-Those screenshots were downloaded and visually inspected. The remaining UI flow
-failed during streaming/edit persistence. Test fixtures now serve HTTP byte ranges,
-use a sustained AAC clip and pause before editing. The editor now keeps its chosen
-track when the playback queue advances. These fixes await the next full run.
+The user sideloaded older run 43621684813 and confirmed music playback but missing
+covers. Their screenshots show a mashup with a placeholder and no matching lyrics.
+New source adds legacy YouTube/SoundCloud cover recovery, lock-screen artwork,
+manual lyric search, remix-aware matching, offline lyrics and per-song offsets.
+Run 43669795963 exposed a Swift isolation trap in the lock-screen artwork callback;
+explicit Sendable callbacks fixed it. The UI flow then exposed unseekable HTTP
+fixtures and an editor that followed playback-queue changes. Byte-range fixtures,
+a paused sustained clip and a stable editor selection fixed those issues.
+
+**Export integration:** branch `ios/native-exports`, commit 42da2c5, is under native
+validation in run 43672176869. Simulator compilation and native tests passed;
+UI/device packaging are pending. The branch integrates WAV/MP3/FLAC/M4A/Opus export,
+quality choices, cancellation and persistent encoded-plus-playable Opus copies.
+Do not call these formats available in the main branch IPA until integration is
+merged and that app build passes. The main development IPA above still exports WAV.
 
 **Live providers:** macOS run https://github.com/sillytira/riff/actions/runs/43622202851
 failed overall because YouTube search returned 15 results but resolving three
@@ -108,7 +110,7 @@ send private cookies or passwords through chat; implement local account handling
 4. Finish Spotify/Apple/Deezer/etc. playlist migration and account library flows.
    Current public import delegates to yt-dlp, which does not cover every original
    metadata-only provider. Do not claim those providers work yet.
-5. Validate history/favorites, then finish library removal, account/library backup and
+5. Finish library removal, account/library backup and
    restore, download progress/recovery and duplicate handling.
 6. Complete interruption/route/background download relaunch recovery and verify
    Now Playing artwork on a physical device. Current lifecycle handling
@@ -143,5 +145,5 @@ Opus for Apple Silicon host, iPhone and simulator. It includes a cancellation-aw
 C conversion API, MP3/FLAC/M4A/Opus conversion checks, metadata retention checks and
 FLAC sample equality checks. Run 43671363635 passed host conversion, metadata, lossless-sample equality,
 existing-file preservation and cancellation checks, then built the iPhone and
-simulator libraries. It is not linked into the app yet. The app still exports WAV only. Do not mark the format
+simulator libraries. The standalone dependency build is validated; app integration is on `ios/native-exports` as described above. The main IPA still exports WAV only. Do not mark the format
 conversion or streaming DSP gates complete.
