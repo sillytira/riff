@@ -12,27 +12,27 @@ final class PlaybackCommands {
     init(library: AudioLibrary) {
         self.library = library
         let center = MPRemoteCommandCenter.shared()
-        handlers.append((center.playCommand, center.playCommand.addTarget { [weak library] _ in
+        handlers.append((center.playCommand, center.playCommand.addTarget { @Sendable [weak library] _ in
             Task { @MainActor in if let library, !library.isPlaying { library.togglePlayback() } }
             return .success
         }))
-        handlers.append((center.pauseCommand, center.pauseCommand.addTarget { [weak library] _ in
+        handlers.append((center.pauseCommand, center.pauseCommand.addTarget { @Sendable [weak library] _ in
             Task { @MainActor in if let library, library.isPlaying { library.togglePlayback() } }
             return .success
         }))
-        handlers.append((center.togglePlayPauseCommand, center.togglePlayPauseCommand.addTarget { [weak library] _ in
+        handlers.append((center.togglePlayPauseCommand, center.togglePlayPauseCommand.addTarget { @Sendable [weak library] _ in
             Task { @MainActor in library?.togglePlayback() }
             return .success
         }))
-        handlers.append((center.nextTrackCommand, center.nextTrackCommand.addTarget { [weak library] _ in
+        handlers.append((center.nextTrackCommand, center.nextTrackCommand.addTarget { @Sendable [weak library] _ in
             Task { @MainActor in library?.next() }
             return .success
         }))
-        handlers.append((center.previousTrackCommand, center.previousTrackCommand.addTarget { [weak library] _ in
+        handlers.append((center.previousTrackCommand, center.previousTrackCommand.addTarget { @Sendable [weak library] _ in
             Task { @MainActor in library?.previous() }
             return .success
         }))
-        handlers.append((center.changePlaybackPositionCommand, center.changePlaybackPositionCommand.addTarget { [weak library] event in
+        handlers.append((center.changePlaybackPositionCommand, center.changePlaybackPositionCommand.addTarget { @Sendable [weak library] event in
             guard let event = event as? MPChangePlaybackPositionCommandEvent else { return .commandFailed }
             let position = event.positionTime
             Task { @MainActor in library?.seek(to: position) }
@@ -51,7 +51,7 @@ final class PlaybackCommands {
                 artworkTask = Task { @MainActor [weak self] in
                     guard let data = try? await ArtworkCache.shared.imageData(for: url), !Task.isCancelled,
                           let image = UIImage(data: data), let self, self.artworkURL == url else { return }
-                    self.artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+                    self.artwork = MPMediaItemArtwork(boundsSize: image.size) { @Sendable _ in image }
                     self.update()
                 }
             }
