@@ -13,6 +13,8 @@ Draft PR: https://github.com/sillytira/riff/pull/1
 ## Implemented in source
 
 - Native SwiftUI library, provider search, download queue, full player and mini-player.
+- Persistent Favorites and Recently Played for local/online songs, with favorites
+  accessible from Library, song menus and the player navigation bar (pending CI).
 - Native iOS 26 glass tab accessory and system navigation; iOS 18 material fallback.
 - Files audio import, sandbox copies, atomic library storage, restored identities.
 - Embedded CPython 3.13 and yt-dlp 2026.10.26; no companion server or subprocess.
@@ -54,8 +56,13 @@ lock-screen artwork, manual lyric search, remix-aware matching, offline lyrics
 and per-song timing offsets. Embedded and local artwork tests passed. Subsequent
 runs failed a remote-cover test; the most recent failure was a Swift isolation
 trap in the lock-screen artwork callback, identified from the crash report.
-Commit f180497 explicitly makes system callbacks Sendable; validation run
-43669795963 is pending. Do not represent it as passing before inspecting results.
+Commit f180497 explicitly makes system callbacks Sendable. Run 43669795963
+passed all 28 native tests and four of five UI tests, including downloading a
+tagged audio file and showing its embedded cover in both Library and Now Playing.
+Those screenshots were downloaded and visually inspected. The remaining UI flow
+failed during streaming/edit persistence. Test fixtures now serve HTTP byte ranges,
+use a sustained AAC clip and pause before editing. The editor now keeps its chosen
+track when the playback queue advances. These fixes await the next full run.
 
 **Live providers:** macOS run https://github.com/sillytira/riff/actions/runs/43622202851
 failed overall because YouTube search returned 15 results but resolving three
@@ -101,7 +108,7 @@ send private cookies or passwords through chat; implement local account handling
 4. Finish Spotify/Apple/Deezer/etc. playlist migration and account library flows.
    Current public import delegates to yt-dlp, which does not cover every original
    metadata-only provider. Do not claim those providers work yet.
-5. Finish history/favorites (currently being implemented), library removal, account/library backup and
+5. Validate history/favorites, then finish library removal, account/library backup and
    restore, download progress/recovery and duplicate handling.
 6. Complete interruption/route/background download relaunch recovery and verify
    Now Playing artwork on a physical device. Current lifecycle handling
@@ -128,3 +135,12 @@ The workflow launches the WAV fixture server needed by the end-to-end native tes
 Desktop runtime files remain unchanged. Baseline `node --test`: 56 tests,
 47 passed and 9 pre-existing failures (lyrics/search exports, search assertions,
 Spotify OAuth URL handling). These failures have not been represented as passes.
+
+## Codec dependency work
+
+An isolated branch `codec/native` builds checksum-pinned FFmpeg 8.0.1, LAME and
+Opus for Apple Silicon host, iPhone and simulator. It includes a cancellation-aware
+C conversion API, MP3/FLAC/M4A/Opus conversion checks, metadata retention checks and
+FLAC sample equality checks. This work is still under build validation and is not
+linked into the app yet. The app still exports WAV only. Do not mark the format
+conversion or streaming DSP gates complete.
