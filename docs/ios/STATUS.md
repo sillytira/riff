@@ -47,12 +47,18 @@ Draft PR: https://github.com/sillytira/riff/pull/1
 
 ## Evidence obtained
 
-Latest fully passing native app build: https://github.com/sillytira/riff/actions/runs/43693993803
-Unsigned IPA: https://github.com/sillytira/riff/actions/runs/43693993803/artifacts/14154795143
-This run passed all 47 native tests, all six UI tests, device compilation and IPA
-packaging. Its source (a1c7a5a) is merged into `ios/liquid-glass`. Validation includes
-actual OS background transfers, persistent jobs/recovery, offline-first selection
-and queue preservation, in addition to the prior streaming/artwork/editor checks.
+Latest fully passing native app build: https://github.com/sillytira/riff/actions/runs/43697046608
+Unsigned IPA: https://github.com/sillytira/riff/actions/runs/43697046608/artifacts/14155078176
+This run passed all 49 native tests, all six UI tests, device compilation and IPA
+packaging. Its source (4ff72c8) is merged into `ios/liquid-glass`. It fixes a
+physical-device playback report: initial AAC encoder-delay frames or seek preroll
+could be discarded completely, triggering a zero-length FIFO resize and “Read
+audio stream: Invalid argument.” The failure was reproduced on AAC files locally;
+the corrected decoder produced PCM, and the AAC startup/compressed-seek cases
+passed iOS tests. Physical retesting of the user's provider track is pending.
+
+Prior download recovery run 43693993803 passed 47 native and six UI tests,
+including OS background transfer, persistent recovery and offline-first selection.
 
 Prior streaming integration run 43678983113 passed 42 native and six UI tests;
 consolidation run 43680430624 also passed. Cover screenshots were visually inspected
@@ -62,6 +68,11 @@ The user sideloaded older run 43621684813 and confirmed music playback but missi
 covers. Their screenshots show a mashup with a placeholder and no matching lyrics.
 New source adds legacy YouTube/SoundCloud cover recovery, lock-screen artwork,
 manual lyric search, remix-aware matching, offline lyrics and per-song offsets.
+A newer phone screenshot shows covers in Discover but reports the AAC decoder
+failure described above. The user also reports an import action that does nothing
+on opening; the specific action and file type/provider were asked asynchronously
+and remain unknown. The local decoder branch adds coordinated Files reads,
+progress and persistent on-screen import errors, but is not yet merged.
 Run 43669795963 exposed a Swift isolation trap in the lock-screen artwork callback;
 explicit Sendable callbacks fixed it. The UI flow then exposed unseekable HTTP
 fixtures and an editor that followed playback-queue changes. Byte-range fixtures,
@@ -101,7 +112,10 @@ Run 43694052421 passed native validation and six of eight UI tests, including
 pause/relaunch/resume and streaming/editor flows. The two failures exposed missing
 picker accessibility values and a removal-confirmation selector race. Commit
 312bd22 adds explicit accessibility values and a distinct confirmation identifier;
-revalidation is running. These changes are not yet merged.
+revalidation is running. A subsequent run passed seven of eight UI tests;
+iOS 26 exposes a nested duplicate accessibility node for the confirmation action.
+Commit e4f1dc2 selects that one wrapped control with firstMatch. These changes are
+not yet merged.
 
 `ios/local-decoders` adds local in-process Vorbis/Opus decoding, metadata/artwork
 access and bounded PCM playback. Linux checks passed local OGG/Opus/FLAC decoding,
