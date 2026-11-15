@@ -62,9 +62,13 @@ def track(info):
     webpage = info.get('webpage_url') or info.get('original_url') or info.get('url') or ''
     if not webpage.startswith('http') and info.get('ie_key') in ('Youtube', 'YoutubeIE'):
         webpage = 'https://www.youtube.com/watch?v=' + identity
+    artwork = info.get('thumbnail') or next((item.get('url') for item in reversed(info.get('thumbnails') or []) if item.get('url')), None)
+    provider = info.get('extractor_key') or info.get('ie_key') or ''
+    if not artwork and provider.lower().startswith('youtube') and re.fullmatch(r'[A-Za-z0-9_-]{11}', identity):
+        artwork = f'https://i.ytimg.com/vi/{identity}/hqdefault.jpg'
     return dict(id=identity, title=info.get('track') or info.get('title') or 'Untitled',
                 artist=info.get('artist') or info.get('uploader') or info.get('channel') or '',
-                webpageURL=webpage, artworkURL=info.get('thumbnail') or next((item.get('url') for item in reversed(info.get('thumbnails') or []) if item.get('url')), None),
+                webpageURL=webpage, artworkURL=artwork,
                 duration=info.get('duration'), provider=info.get('extractor_key') or info.get('ie_key') or '', album=info.get('album'))
 
 

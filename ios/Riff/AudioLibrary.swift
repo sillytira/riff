@@ -12,6 +12,7 @@ struct LocalTrack: Codable, Identifiable {
     var album: String? = nil
     var duration: Double? = nil
     var metadataIndexed: Bool? = nil
+    var sourceProvider: String? = nil
 }
 
 /// Owns sandbox copies: access to the original Files provider is needed only during import.
@@ -73,6 +74,7 @@ final class AudioLibrary: NSObject {
     @ObservationIgnored private let directory: URL
     private struct MetadataJob { let id: UUID; let url: URL }
     @ObservationIgnored private var metadataJobs: [MetadataJob] = []
+    @ObservationIgnored private var artworkRepairs: Set<UUID> = []
     @ObservationIgnored private var metadataCursor = 0
     @ObservationIgnored private var metadataWorker: Task<Void, Never>?
     @ObservationIgnored private let effectsFile: URL
@@ -126,10 +128,11 @@ final class AudioLibrary: NSObject {
                     if let data = metadata.artwork { artwork = try? await ArtworkCache.shared.storeEmbedded(data, identity: job.id.uuidString) }
                     guard self.manifestIsReadable, let index = self.tracks.firstIndex(where: { $0.id == job.id }) else { continue }
                     var updated = self.tracks
-                    if updated[index].webpageURL == nil {
+                    if updated[index].webpageURL == nil || updated[index].sourceProvider == "Generic" {
                         if let title = metadata.title, !title.isEmpty { updated[index].name = title }
                         if let artist = metadata.artist, !artist.isEmpty { updated[index].artist = artist }
                     }
+                    if (updated[index].artist ?? "").isEmpty, let artist = metadata.artist { updated[index].artist = artist }
                     if updated[index].artworkURL == nil { updated[index].artworkURL = artwork }
                     if updated[index].album == nil { updated[index].album = metadata.album }
                     updated[index].duration = metadata.duration ?? updated[index].duration
@@ -191,8 +194,11 @@ final class AudioLibrary: NSObject {
         do {
             try FileManager.default.copyItem(at: source, to: destination)
             _ = try AVAudioPlayer(contentsOf: destination)
-            let track = LocalTrack(id: id, name: media.track.title, filename: filename, artist: media.track.artist,
+            var track = LocalTrack(id: id, name: media.track.title, filename: filename, artist: media.track.artist,
                                    artworkURL: media.track.artworkURL, webpageURL: media.track.webpageURL)
+            track.album = media.track.album
+            track.duration = media.track.duration
+            track.sourceProvider = media.track.provider
             let updated = tracks + [track]
             try JSONEncoder().encode(updated).write(to: manifest, options: .atomic)
             tracks = updated
@@ -236,10 +242,14 @@ final class AudioLibrary: NSObject {
         guard try await asset.load(.isPlayable) else {
             throw ExtractionError(message: "The downloaded HLS asset is not playable.")
         }
-        let track = LocalTrack(id: UUID(), name: media.track.title, filename: source.lastPathComponent,
+        var track = LocalTrack(id: UUID(), name: media.track.title, filename: source.lastPathComponent,
                                artist: media.track.artist, artworkURL: media.track.artworkURL,
                                webpageURL: media.track.webpageURL,
                                assetRelativePath: String(source.resolvingSymlinksInPath().path.dropFirst(home.count)))
+        track.album = media.track.album
+        track.duration = media.track.duration
+        track.sourceProvider = media.track.provider
+        track.metadataIndexed = true
         let updated = tracks + [track]
         try JSONEncoder().encode(updated).write(to: manifest, options: .atomic)
         tracks = updated
@@ -302,6 +312,7 @@ final class AudioLibrary: NSObject {
 
     func play(_ track: LocalTrack, preserveQueue: Bool = false) {
         _ = lifecycle
+        repairArtwork(for: track)
         if !preserveQueue {
             playbackQueue = PlaybackQueue(entries: tracks.map { PlaylistEntry(id: $0.id, source: .local($0.id)) }, currentID: track.id)
         }
@@ -344,6 +355,24 @@ final class AudioLibrary: NSObject {
             if !isPlaying { throw PlaybackError.unavailable }
             commands.update()
         } catch { self.error = error.localizedDescription }
+    }
+
+    private func repairArtwork(for track: LocalTrack) {
+        guard track.artworkURL == nil, let source = track.webpageURL, artworkRepairs.insert(track.id).inserted else { return }
+        Task { @MainActor [weak self] in
+            defer { self?.artworkRepairs.remove(track.id) }
+            guard let url = try? await ArtworkLocator.shared.cover(for: source) else { return }
+            _ = try? await ArtworkCache.shared.imageData(for: url)
+            guard let self, self.manifestIsReadable,
+                  let index = self.tracks.firstIndex(where: { $0.id == track.id }), self.tracks[index].artworkURL == nil else { return }
+            var updated = self.tracks
+            updated[index].artworkURL = url
+            do {
+                try JSONEncoder().encode(updated).write(to: self.manifest, options: .atomic)
+                self.tracks = updated
+                if self.current?.id == track.id { self.current = updated[index]; self.commands.update() }
+            } catch { }
+        }
     }
 
     func togglePlayback() {
