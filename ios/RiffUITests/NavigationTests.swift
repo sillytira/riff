@@ -2,6 +2,8 @@ import XCTest
 
 @MainActor
 final class NavigationTests: XCTestCase {
+    override func setUpWithError() throws { continueAfterFailure = false }
+
     func testArtworkFromDownloadedMetadataIsVisibleInLibraryAndPlayer() {
         let app = XCUIApplication()
         app.launch()
@@ -123,7 +125,7 @@ final class NavigationTests: XCTestCase {
         app.terminate()
         app.launch()
         app.tabBars.buttons["Library"].tap()
-        XCTAssertTrue(app.staticTexts["ui-tone (edit)"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "local-track-", "ui-tone (edit)")).firstMatch.waitForExistence(timeout: 10))
     }
 
     private func attach(_ app: XCUIApplication, name: String) {
