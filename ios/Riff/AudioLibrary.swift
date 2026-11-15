@@ -35,6 +35,7 @@ final class AudioLibrary: NSObject {
     private(set) var onlineCurrent: OnlineTrack?
     private(set) var isLoading = false
     private(set) var activeImports = 0
+    private(set) var importFailures: [AudioImportFailure] = []
     var effects = AudioEffectSettings() {
         didSet {
             player?.settings = effects
@@ -225,7 +226,10 @@ final class AudioLibrary: NSObject {
         catch { self.error = "Could not save audio effects: " + error.localizedDescription }
     }
 
+    func dismissImportFailures() { importFailures = [] }
+
     func importFiles(_ urls: [URL]) async {
+        if activeImports == 0 { importFailures = [] }
         activeImports += 1
         defer { activeImports -= 1 }
         guard manifestIsReadable else { error = "The library index could not be read. Its original data has been preserved."; return }
@@ -236,7 +240,7 @@ final class AudioLibrary: NSObject {
             let filename = id.uuidString + "." + source.pathExtension
             let destination = directory.appending(path: filename)
             do {
-                try FileManager.default.copyItem(at: source, to: destination)
+                try await FileImportReader.shared.copy(source, to: destination)
                 // Validate decodability before committing an entry to the library.
                 let validated = try await AudioFileValidator.shared.validate(destination)
                 try Task.checkCancellation()
@@ -249,7 +253,10 @@ final class AudioLibrary: NSObject {
                 enqueueMetadata(id: id, url: destination)
             } catch {
                 try? FileManager.default.removeItem(at: destination)
-                self.error = "Could not import \(source.lastPathComponent): \(error.localizedDescription)"
+                if error is CancellationError { return }
+                let message = "Could not import \(source.lastPathComponent): \(error.localizedDescription)"
+                importFailures.append(AudioImportFailure(message: message))
+                self.error = message
             }
         }
     }

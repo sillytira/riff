@@ -98,3 +98,13 @@ NSString *RiffPythonRequest(NSString *bundlePath, NSString *request) {
         return response;
     }
 }
+
+NSError *RiffCoordinatedFileCopy(NSURL *source, NSURL *destination) {
+    NSFileCoordinator *coordinator = [[NSFileCoordinator alloc] initWithFilePresenter:nil];
+    __block NSError *copyError = nil;
+    NSError *coordinationError = nil;
+    [coordinator coordinateReadingItemAtURL:source options:0 error:&coordinationError byAccessor:^(NSURL *available) {
+        [[NSFileManager defaultManager] copyItemAtURL:available toURL:destination error:&copyError];
+    }];
+    return coordinationError ?: copyError;
+}

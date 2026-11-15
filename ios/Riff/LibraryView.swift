@@ -22,6 +22,14 @@ struct LibraryView: View {
                     NavigationLink { ListeningView(library: library, favorites: true) } label: { Label("Favorites", systemImage: "heart") }
                     NavigationLink { ListeningView(library: library, favorites: false) } label: { Label("Recently Played", systemImage: "clock") }
                 }
+                if !library.importFailures.isEmpty {
+                    Section("Import issues") {
+                        ForEach(library.importFailures) { failure in
+                            Label(failure.message, systemImage: "exclamationmark.triangle").foregroundStyle(.secondary)
+                        }
+                        Button("Dismiss import issues") { library.dismissImportFailures() }
+                    }
+                }
                 Section("Songs") {
                     if library.tracks.isEmpty {
                         ContentUnavailableView {
