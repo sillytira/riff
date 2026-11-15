@@ -130,11 +130,6 @@ struct NowPlayingView: View {
                             Label("Repeat: " + library.repeatMode.rawValue, systemImage: library.repeatMode == .one ? "repeat.1" : "repeat")
                         }
                     }.labelStyle(.iconOnly).buttonStyle(.bordered)
-                    if let source = library.playingSource {
-                        Button(library.listening.isFavorite(source) ? "Remove from Favorites" : "Add to Favorites", systemImage: library.listening.isFavorite(source) ? "heart.fill" : "heart") {
-                            library.toggleFavorite(source)
-                        }.buttonStyle(.bordered)
-                    }
                     AudioRoutePicker().frame(width: 44, height: 44).accessibilityLabel("Audio output")
                     NavigationLink { AudioEditorView(library: library) } label: { Label("Audio Editor", systemImage: "waveform.path") }
                         .buttonStyle(.bordered)
@@ -151,7 +146,16 @@ struct NowPlayingView: View {
                 }.padding()
             }
             .navigationTitle("Now Playing").navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Close", systemImage: "chevron.down") { dismiss() } } }
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    if let source = library.playingSource {
+                        Button(library.listening.isFavorite(source) ? "Remove from Favorites" : "Add to Favorites", systemImage: library.listening.isFavorite(source) ? "heart.fill" : "heart") {
+                            library.toggleFavorite(source)
+                        }
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) { Button("Close", systemImage: "chevron.down") { dismiss() } }
+            }
         }
     }
     private func time(_ seconds: Double) -> String {
