@@ -90,6 +90,45 @@ final class NavigationTests: XCTestCase {
         attach(app, name: "Settings")
     }
 
+    func testSongDetailsEditingAndRemovalPersistAfterRelaunch() {
+        let app = XCUIApplication()
+        app.launch()
+        app.tabBars.buttons["Discover"].tap()
+        app.searchFields.firstMatch.tap()
+        app.searchFields.firstMatch.typeText("http://127.0.0.1:8765/tagged.m4a\n")
+        XCTAssertTrue(app.staticTexts["tagged"].firstMatch.waitForExistence(timeout: 30))
+        app.buttons["Download"].firstMatch.tap()
+        app.tabBars.buttons["Downloads"].tap()
+        XCTAssertTrue(app.staticTexts["Saved offline"].waitForExistence(timeout: 30))
+        app.tabBars.buttons["Library"].tap()
+        let song = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "local-track-", "Metadata Test Song")).firstMatch
+        XCTAssertTrue(song.waitForExistence(timeout: 15))
+        song.press(forDuration: 1)
+        app.buttons["Edit song details"].tap()
+        XCTAssertTrue(app.navigationBars["Song details"].waitForExistence(timeout: 5))
+        let field = app.textFields["song-title"]
+        let old = field.value as? String ?? ""
+        let name = "Edited song " + String(UUID().uuidString.prefix(6))
+        field.tap()
+        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: old.count) + name)
+        app.buttons["Save"].tap()
+        app.terminate()
+        app.launch()
+        app.searchFields.firstMatch.tap()
+        app.searchFields.firstMatch.typeText(name)
+        let edited = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "local-track-", name)).firstMatch
+        XCTAssertTrue(edited.waitForExistence(timeout: 5))
+        edited.press(forDuration: 1)
+        app.buttons["Remove download"].tap()
+        app.buttons["Remove download"].tap()
+        XCTAssertFalse(edited.exists)
+        app.terminate()
+        app.launch()
+        app.searchFields.firstMatch.tap()
+        app.searchFields.firstMatch.typeText(name)
+        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "local-track-", name)).firstMatch.exists)
+    }
+
     func testStreamingDownloadAndEditingThroughTheInterface() {
         let app = XCUIApplication()
         app.launch()

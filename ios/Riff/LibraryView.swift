@@ -3,6 +3,9 @@ import UniformTypeIdentifiers
 
 struct LibraryView: View {
     @Bindable var library: AudioLibrary
+    let playlists: PlaylistStore
+    @State private var editingTrack: LocalTrack?
+    @State private var removingTrack: LocalTrack?
     @State private var importing = false
     @State private var query = ""
 
@@ -48,6 +51,14 @@ struct LibraryView: View {
                         .accessibilityIdentifier("local-track-" + track.id.uuidString)
                         .listRowBackground(Color.clear)
                         .contextMenu {
+                            Button("Edit song details", systemImage: "pencil") { editingTrack = track }
+                            if let url = library.editableURL(for: track) {
+                                ShareLink(item: library.originalURL(for: track) ?? url) { Label("Share audio", systemImage: "square.and.arrow.up") }
+                                Button("Reload file tags", systemImage: "arrow.clockwise") {
+                                    do { try library.rescanMetadata(track) } catch { library.error = error.localizedDescription }
+                                }
+                            }
+                            Button("Remove download", systemImage: "trash", role: .destructive) { removingTrack = track }
                             Button(library.listening.isFavorite(.local(track.id)) ? "Remove from Favorites" : "Add to Favorites", systemImage: "heart") { library.toggleFavorite(.local(track.id)) }
                         }
                     }
@@ -62,6 +73,17 @@ struct LibraryView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Import audio", systemImage: "plus") { importing = true }
                 }
+            }
+            .sheet(item: $editingTrack) { track in TrackDetailsView(track: track, library: library) }
+            .confirmationDialog("Remove this download?", isPresented: Binding(get: { removingTrack != nil }, set: { if !$0 { removingTrack = nil } }), titleVisibility: .visible) {
+                if let track = removingTrack {
+                    Button("Remove download", role: .destructive) {
+                        do { try library.removeTracks([track.id], playlists: playlists) } catch { library.error = error.localizedDescription }
+                        removingTrack = nil
+                    }
+                }
+            } message: {
+                Text("Riff’s saved copy will be removed. Songs with a source link remain available online in your playlists and Favorites.")
             }
             .fileImporter(isPresented: $importing, allowedContentTypes: [.audio], allowsMultipleSelection: true) { result in
                 switch result {

@@ -40,6 +40,14 @@ final class PlaybackCommands {
         }))
     }
 
+    func clear() {
+        artworkTask?.cancel()
+        artworkTask = nil
+        artworkURL = nil
+        artwork = nil
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+    }
+
     func update() {
         guard let library, let title = library.playingTitle else { return }
         let url = library.current?.artworkURL ?? library.onlineCurrent?.artworkURL

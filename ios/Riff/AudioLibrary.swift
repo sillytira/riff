@@ -1,7 +1,7 @@
 import AVFoundation
 import Observation
 
-struct LocalTrack: Codable, Identifiable {
+struct LocalTrack: Codable, Identifiable, Sendable {
     let id: UUID
     var name: String
     let filename: String
@@ -14,6 +14,12 @@ struct LocalTrack: Codable, Identifiable {
     var metadataIndexed: Bool? = nil
     var sourceProvider: String? = nil
     var playbackFilename: String? = nil
+    var metadataCustomized: Bool? = nil
+
+    var onlineEquivalent: OnlineTrack? {
+        guard let webpageURL, let url = URL(string: webpageURL), ["https", "http"].contains(url.scheme?.lowercased() ?? "") else { return nil }
+        return OnlineTrack(id: webpageURL, title: name, artist: artist ?? "", webpageURL: webpageURL, artworkURL: artworkURL, duration: duration, provider: sourceProvider ?? "Generic", album: album)
+    }
 }
 
 /// Owns sandbox copies: access to the original Files provider is needed only during import.
@@ -82,7 +88,7 @@ final class AudioLibrary: NSObject {
     }
     @ObservationIgnored private var player: NativeAudioPlayer?
     @ObservationIgnored private let directory: URL
-    private struct MetadataJob { let id: UUID; let url: URL }
+    private struct MetadataJob { let id: UUID; let url: URL; let forceTags: Bool }
     @ObservationIgnored private var metadataJobs: [MetadataJob] = []
     @ObservationIgnored private var artworkRepairs: Set<UUID> = []
     @ObservationIgnored private var metadataCursor = 0
@@ -125,8 +131,8 @@ final class AudioLibrary: NSObject {
         }
     }
 
-    private func enqueueMetadata(id: UUID, url: URL) {
-        metadataJobs.append(MetadataJob(id: id, url: url))
+    private func enqueueMetadata(id: UUID, url: URL, forceTags: Bool = false) {
+        metadataJobs.append(MetadataJob(id: id, url: url, forceTags: forceTags))
         guard metadataWorker == nil else { return }
         metadataWorker = Task { @MainActor [weak self] in
             guard let self else { return }
@@ -139,13 +145,16 @@ final class AudioLibrary: NSObject {
                     if let data = metadata.artwork { artwork = try? await ArtworkCache.shared.storeEmbedded(data, identity: job.id.uuidString) }
                     guard self.manifestIsReadable, let index = self.tracks.firstIndex(where: { $0.id == job.id }) else { continue }
                     var updated = self.tracks
-                    if updated[index].webpageURL == nil || updated[index].sourceProvider == "Generic" {
+                    if updated[index].metadataCustomized != true && (job.forceTags || updated[index].webpageURL == nil || updated[index].sourceProvider == "Generic") {
                         if let title = metadata.title, !title.isEmpty { updated[index].name = title }
                         if let artist = metadata.artist, !artist.isEmpty { updated[index].artist = artist }
                     }
-                    if (updated[index].artist ?? "").isEmpty, let artist = metadata.artist { updated[index].artist = artist }
+                    if updated[index].metadataCustomized != true, (updated[index].artist ?? "").isEmpty, let artist = metadata.artist { updated[index].artist = artist }
                     if updated[index].artworkURL == nil { updated[index].artworkURL = artwork }
-                    if updated[index].album == nil { updated[index].album = metadata.album }
+                    if job.forceTags && updated[index].metadataCustomized != true {
+                        updated[index].artist = metadata.artist ?? ""
+                        updated[index].album = metadata.album
+                    } else if updated[index].album == nil { updated[index].album = metadata.album }
                     updated[index].duration = metadata.duration ?? updated[index].duration
                     updated[index].metadataIndexed = metadata.artwork == nil || artwork != nil
                     try JSONEncoder().encode(updated).write(to: self.manifest, options: .atomic)
@@ -218,6 +227,107 @@ final class AudioLibrary: NSObject {
             try? FileManager.default.removeItem(at: destination)
             throw error
         }
+    }
+
+    func updateMetadata(_ id: UUID, title: String, artist: String, album: String) throws {
+        guard manifestIsReadable else { throw ExtractionError(message: "The library index is unreadable; its data has been preserved.") }
+        guard let index = tracks.firstIndex(where: { $0.id == id }) else { throw ExtractionError(message: "This song is no longer in your library.") }
+        let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { throw ExtractionError(message: "Give the song a title.") }
+        var updated = tracks
+        updated[index].name = title
+        updated[index].artist = artist.trimmingCharacters(in: .whitespacesAndNewlines)
+        updated[index].album = album.trimmingCharacters(in: .whitespacesAndNewlines)
+        updated[index].metadataCustomized = true
+        try JSONEncoder().encode(updated).write(to: manifest, options: .atomic)
+        tracks = updated
+        if current?.id == id { current = updated[index]; commands.update() }
+    }
+
+    func rescanMetadata(_ track: LocalTrack) throws {
+        guard manifestIsReadable, let index = tracks.firstIndex(where: { $0.id == track.id }), let url = editableURL(for: track) else {
+            throw ExtractionError(message: "The song’s file is unavailable for metadata indexing.")
+        }
+        var updated = tracks
+        updated[index].metadataCustomized = false
+        updated[index].metadataIndexed = false
+        try JSONEncoder().encode(updated).write(to: manifest, options: .atomic)
+        tracks = updated
+        enqueueMetadata(id: track.id, url: url, forceTags: true)
+    }
+
+    func stop() {
+        generation = UUID()
+        monitor?.cancel()
+        monitor = nil
+        player?.stop()
+        player = nil
+        streamPlayer?.pause()
+        streamPlayer = nil
+        if let endObserver { NotificationCenter.default.removeObserver(endObserver) }
+        endObserver = nil
+        current = nil
+        onlineCurrent = nil
+        isPlaying = false
+        isLoading = false
+        playbackQueue.currentID = nil
+        commands.clear()
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    }
+
+    func removeTracks(_ ids: Set<UUID>, playlists: PlaylistStore? = nil) throws {
+        guard manifestIsReadable else { throw ExtractionError(message: "The library index is unreadable; existing data was preserved.") }
+        let removed = tracks.filter { ids.contains($0.id) }
+        guard !removed.isEmpty else { return }
+        let files = try removed.flatMap { try ownedFiles(for: $0) }
+        var replacements: [UUID: OnlineTrack] = [:]
+        for track in removed { if let online = track.onlineEquivalent { replacements[track.id] = online } }
+        let updated = tracks.filter { !ids.contains($0.id) }
+        // Commit the index before reclaiming storage. An interrupted cleanup can
+        // leave unused bytes, but never an entry whose audio was deleted first.
+        try JSONEncoder().encode(updated).write(to: manifest, options: .atomic)
+        tracks = updated
+        playbackQueue.entries.removeAll { entry in
+            if case .local(let id) = entry.source { return ids.contains(id) }
+            return false
+        }
+        if let current, ids.contains(current.id) { stop() }
+        listening.remapLocal(ids, replacements: replacements)
+        playlists?.remapLocal(ids, replacements: replacements)
+        var cleanupFailed = false
+        for file in files where FileManager.default.fileExists(atPath: file.path) {
+            do { try FileManager.default.removeItem(at: file) } catch { cleanupFailed = true }
+        }
+        if cleanupFailed { error = "The songs were removed from the library, but some download storage could not be released." }
+        else if let failure = listening.error ?? playlists?.error { error = failure }
+    }
+
+    private func ownedFiles(for track: LocalTrack) throws -> [URL] {
+        if let relative = track.assetRelativePath {
+            let home = URL(filePath: NSHomeDirectory()).resolvingSymlinksInPath()
+            let asset = home.appending(path: relative).standardizedFileURL.resolvingSymlinksInPath()
+            guard !relative.hasPrefix("/"), !relative.split(separator: "/").contains(".."),
+                  asset.path.hasPrefix(home.path + "/"), asset.pathExtension == "movpkg", asset.lastPathComponent == track.filename else {
+                throw ExtractionError(message: "The offline asset’s location is invalid; its files were preserved.")
+            }
+            return [asset]
+        }
+        var names = [track.filename]
+        if let playbackFilename = track.playbackFilename { names.append(playbackFilename) }
+        let root = directory.standardizedFileURL.resolvingSymlinksInPath()
+        return try names.map { name in
+            let file = root.appending(path: name).standardizedFileURL.resolvingSymlinksInPath()
+            guard (name.hasPrefix(track.id.uuidString + ".") || name == track.id.uuidString + "-decoded.wav"),
+                  name == file.lastPathComponent, file.path.hasPrefix(root.path + "/") else {
+                throw ExtractionError(message: "The song’s storage location is invalid; its files were preserved.")
+            }
+            return file
+        }
+    }
+
+    func originalURL(for track: LocalTrack) -> URL? {
+        guard track.assetRelativePath == nil else { return nil }
+        return directory.appending(path: track.filename)
     }
 
     func editableURL(for track: LocalTrack) -> URL? {

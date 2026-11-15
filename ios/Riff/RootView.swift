@@ -21,14 +21,14 @@ struct RootView: View {
             }
         }
         .sheet(isPresented: $showPlayer) { NowPlayingView(library: library, downloads: downloads) }
-        .alert("Playback error", isPresented: Binding(get: { library.error != nil }, set: { if !$0 { library.error = nil } })) {
+        .alert("Riff", isPresented: Binding(get: { library.error != nil }, set: { if !$0 { library.error = nil } })) {
             Button("OK") { library.error = nil }
         } message: { Text(library.error ?? "") }
     }
 
     private var tabs: some View {
         TabView {
-            Tab("Library", systemImage: "music.note.house") { LibraryView(library: library) }
+            Tab("Library", systemImage: "music.note.house") { LibraryView(library: library, playlists: playlists) }
             Tab("Playlists", systemImage: "music.note.list") { PlaylistsView(store: playlists, library: library) }
             Tab("Discover", systemImage: "magnifyingglass") { SearchView(library: library, downloads: downloads) }
             Tab("Downloads", systemImage: "arrow.down.circle") { DownloadsView(downloads: downloads) }

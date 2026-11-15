@@ -94,6 +94,18 @@ final class PlaylistStore {
     func move(in id: UUID, from offsets: IndexSet, to destination: Int) {
         update(id) { $0.entries = movingEntries($0.entries, from: offsets, to: destination) }
     }
+    func remapLocal(_ ids: Set<UUID>, replacements: [UUID: OnlineTrack]) {
+        let updated = playlists.map { playlist in
+            var result = playlist
+            result.entries = playlist.entries.compactMap { entry in
+                guard case .local(let id) = entry.source, ids.contains(id) else { return entry }
+                guard let replacement = replacements[id] else { return nil }
+                return PlaylistEntry(id: entry.id, source: .online(replacement))
+            }
+            return result
+        }
+        _ = commit(updated)
+    }
     private func update(_ id: UUID, change: (inout SavedPlaylist) -> Void) {
         guard let index = playlists.firstIndex(where: { $0.id == id }) else { return }
         var updated = playlists
@@ -105,6 +117,7 @@ final class PlaylistStore {
         do {
             try JSONEncoder().encode(updated).write(to: file, options: .atomic)
             playlists = updated
+            error = nil
             return true
         } catch { self.error = error.localizedDescription; return false }
     }

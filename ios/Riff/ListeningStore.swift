@@ -54,6 +54,25 @@ final class ListeningStore {
         updated.history = Array(updated.history.prefix(500))
         commit(updated)
     }
+    func remapLocal(_ ids: Set<UUID>, replacements: [UUID: OnlineTrack]) {
+        func remap(_ entries: [ListeningEntry]) -> [ListeningEntry] {
+            var seen = Set<String>()
+            return entries.compactMap { entry in
+                let source: PlaylistSource
+                if case .local(let id) = entry.source, ids.contains(id) {
+                    guard let replacement = replacements[id] else { return nil }
+                    source = .online(replacement)
+                } else { source = entry.source }
+                let key = ListeningEntry.key(for: source)
+                guard seen.insert(key).inserted else { return nil }
+                return ListeningEntry(id: key, source: source, playedAt: entry.playedAt)
+            }
+        }
+        var updated = snapshot
+        updated.favorites = remap(updated.favorites)
+        updated.history = remap(updated.history)
+        commit(updated)
+    }
     func clearHistory() {
         var updated = snapshot
         updated.history = []
