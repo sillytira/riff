@@ -34,6 +34,8 @@ struct AudioEditorView: View {
     @State private var end = 1.0
     @State private var duration = 1.0
     @State private var peaks: [Float] = []
+    @State private var prepared: PreparedEditorAudio?
+    @State private var preparing = false
     @State private var includeEffects = true
     @State private var format: AudioExportFormat = .wav
     @State private var bitrate = 192000
@@ -67,9 +69,11 @@ struct AudioEditorView: View {
                         Text("End: \(end, specifier: "%.2f") seconds").monospacedDigit()
                         Slider(value: Binding(get: { end }, set: { end = max($0, start + min(0.01, duration)) }), in: 0...duration).accessibilityLabel("Selection end")
                         Button("Preview selection start", systemImage: "play") {
-                            if library.current?.id != track.id { library.play(track) }
-                            library.seek(to: start)
-                            if !library.isPlaying { library.togglePlayback() }
+                            if library.current?.id != track.id { library.play(track, startingAt: start) }
+                            else {
+                                library.seek(to: start)
+                                if !library.isPlaying && !library.isLoading { library.togglePlayback() }
+                            }
                         }
                     }
                     Section {
@@ -82,6 +86,7 @@ struct AudioEditorView: View {
                                 ForEach([96000, 128000, 192000, 256000, 320000], id: \.self) { Text("\($0 / 1000) kbps").tag($0) }
                             }.disabled(exporting)
                         }
+                        if preparing { ProgressView("Preparing audio…") }
                         if exporting {
                             ProgressView("Rendering audio…")
                         }
@@ -90,12 +95,23 @@ struct AudioEditorView: View {
                     } header: { Text("Export") } footer: { Text("The exported selection is saved as a new track. The original audio is preserved.") }
                 }
                 .task(id: track.id) {
+                    preparing = true
+                    var working: PreparedEditorAudio?
+                    defer { working?.removeTemporaryFiles(); preparing = false }
                     do {
-                        let file = try AVAudioFile(forReading: url)
-                        duration = max(0.001, Double(file.length) / file.processingFormat.sampleRate)
+                        let source = try await EditorAudioSource.shared.prepare(url)
+                        working = source
+                        let file = try AVAudioFile(forReading: source.url)
+                        let measured = max(0.001, Double(file.length) / file.processingFormat.sampleRate)
+                        let waveform = try await WaveformReader.shared.peaks(url: source.url)
+                        try Task.checkCancellation()
+                        prepared?.removeTemporaryFiles()
+                        prepared = source
+                        working = nil
+                        duration = measured
                         start = 0
-                        end = duration
-                        peaks = try await WaveformReader.shared.peaks(url: url)
+                        end = measured
+                        peaks = waveform
                     } catch { if !Task.isCancelled { self.error = error.localizedDescription } }
                 }
             } else {
@@ -103,12 +119,12 @@ struct AudioEditorView: View {
             }
         }.navigationTitle("Audio Editor")
         .toolbar {
-            if let track = selectedTrack, let url = library.editableURL(for: track) {
+            if let track = selectedTrack, let prepared {
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     if exporting {
                         Button("Cancel export", systemImage: "xmark.circle") { exportTask?.cancel() }
                     } else {
-                        Button("Save selection as " + format.title, systemImage: "checkmark") { export(url: url, track: track) }
+                        Button("Save selection as " + format.title, systemImage: "checkmark") { export(url: prepared.url, track: track) }
                     }
                     if let exported {
                         ShareLink(item: exported) { Label("Share exported audio", systemImage: "square.and.arrow.up") }
@@ -116,7 +132,11 @@ struct AudioEditorView: View {
                 }
             }
         }
-        .onDisappear { if exporting { exportTask?.cancel() } }
+        .onDisappear {
+            if exporting { exportTask?.cancel() }
+            prepared?.removeTemporaryFiles()
+            prepared = nil
+        }
     }
 
     private func export(url: URL, track: LocalTrack) {
