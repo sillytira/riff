@@ -107,10 +107,12 @@ struct NowPlayingView: View {
     @Environment(\.dismiss) private var dismiss
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 24) {
-                    TrackArtwork(url: library.current?.artworkURL ?? library.onlineCurrent?.artworkURL, size: 280)
-                        .padding(.top, 20)
+            GeometryReader { geometry in
+                ScrollView {
+                    VStack(spacing: 20) {
+                        TrackArtwork(url: library.current?.artworkURL ?? library.onlineCurrent?.artworkURL,
+                                     size: max(160, min(280, geometry.size.width - 48, geometry.size.height * 0.34)))
+                            .padding(.top, 8)
                     VStack(spacing: 8) {
                         Text(library.playingTitle ?? "Riff").font(.title2.bold()).multilineTextAlignment(.center)
                         Text(library.playingArtist).foregroundStyle(.secondary)
@@ -126,40 +128,16 @@ struct NowPlayingView: View {
                             }.font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                         }
                     }
-                    HStack(spacing: 32) {
-                        Button("Back 15 seconds", systemImage: "gobackward.15") { library.seek(to: library.elapsed - 15) }
-                        Button(library.isPlaying ? "Pause" : "Play", systemImage: library.isPlaying ? "pause.circle.fill" : "play.circle.fill") {
-                            library.togglePlayback()
-                        }.font(.system(size: 64))
-                        Button("Forward 15 seconds", systemImage: "goforward.15") { library.seek(to: library.elapsed + 15) }
-                    }.font(.title).labelStyle(.iconOnly)
-                    HStack(spacing: 24) {
-                        Button("Previous", systemImage: "backward.end.fill") { library.previous() }
-                        Button("Next", systemImage: "forward.end.fill") { library.next() }
-                        Button("Shuffle", systemImage: "shuffle") { library.shuffleEnabled.toggle() }
-                            .tint(library.shuffleEnabled ? Color.accentColor : Color.gray)
-                        Menu {
-                            ForEach(AudioLibrary.RepeatMode.allCases, id: \.self) { mode in
-                                Button(mode.rawValue.capitalized) { library.repeatMode = mode }
-                            }
-                        } label: {
-                            Label("Repeat: " + library.repeatMode.rawValue, systemImage: library.repeatMode == .one ? "repeat.1" : "repeat")
-                        }
-                    }.labelStyle(.iconOnly).buttonStyle(.bordered)
-                    AudioRoutePicker().frame(width: 44, height: 44).accessibilityLabel("Audio output")
-                    NavigationLink { AudioEditorView(library: library) } label: { Label("Audio Editor", systemImage: "waveform.path") }
-                        .buttonStyle(.bordered)
-                    NavigationLink { EffectsView(library: library) } label: { Label("Audio Effects", systemImage: "slider.horizontal.3") }
-                        .buttonStyle(.bordered)
-                    NavigationLink { QueueView(library: library) } label: { Label("Up Next", systemImage: "list.bullet") }
-                        .buttonStyle(.bordered)
-                    NavigationLink { LyricsView(library: library) } label: { Label("Lyrics", systemImage: "quote.bubble") }
-                        .buttonStyle(.bordered)
+                    transport
+                    if #available(iOS 26, *) {
+                        GlassEffectContainer(spacing: 12) { secondaryControls }
+                    } else { secondaryControls }
                     if let track = library.onlineCurrent {
                         Button("Save offline", systemImage: "arrow.down.circle") { downloads.download(track, into: library) }
                             .buttonStyle(.bordered)
                     }
-                }.padding()
+                    }.padding(.horizontal, 24).padding(.bottom, 20)
+                }
             }
             .navigationTitle("Now Playing").navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -174,9 +152,54 @@ struct NowPlayingView: View {
             }
         }
     }
+    private var transport: some View {
+        HStack(spacing: 36) {
+            Button("Back 15 seconds", systemImage: "gobackward.15") { library.seek(to: library.elapsed - 15) }
+                .frame(minWidth: 44, minHeight: 44)
+            Button(library.isPlaying ? "Pause" : "Play", systemImage: library.isPlaying ? "pause.circle.fill" : "play.circle.fill") {
+                library.togglePlayback()
+            }.font(.system(size: 64)).frame(minWidth: 72, minHeight: 72)
+            Button("Forward 15 seconds", systemImage: "goforward.15") { library.seek(to: library.elapsed + 15) }
+                .frame(minWidth: 44, minHeight: 44)
+        }.font(.title).labelStyle(.iconOnly)
+    }
+
+    private var secondaryControls: some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 12) {
+                Button("Previous", systemImage: "backward.end.fill") { library.previous() }
+                Button("Next", systemImage: "forward.end.fill") { library.next() }
+                Button("Shuffle", systemImage: "shuffle") { library.shuffleEnabled.toggle() }
+                    .tint(library.shuffleEnabled ? Color.accentColor : Color.gray)
+                    .accessibilityValue(library.shuffleEnabled ? "On" : "Off")
+                Menu {
+                    ForEach(AudioLibrary.RepeatMode.allCases, id: \.self) { mode in
+                        Button(mode.rawValue.capitalized) { library.repeatMode = mode }
+                    }
+                } label: {
+                    Label("Repeat: " + library.repeatMode.rawValue, systemImage: library.repeatMode == .one ? "repeat.1" : "repeat")
+                }
+                AudioRoutePicker().frame(width: 44, height: 44).accessibilityLabel("Audio output")
+            }.labelStyle(.iconOnly)
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+                NavigationLink { AudioEditorView(library: library) } label: { Label("Audio Editor", systemImage: "waveform.path").frame(maxWidth: .infinity, minHeight: 32) }
+                NavigationLink { EffectsView(library: library) } label: { Label("Audio Effects", systemImage: "slider.horizontal.3").frame(maxWidth: .infinity, minHeight: 32) }
+                NavigationLink { QueueView(library: library) } label: { Label("Up Next", systemImage: "list.bullet").frame(maxWidth: .infinity, minHeight: 32) }
+                NavigationLink { LyricsView(library: library) } label: { Label("Lyrics", systemImage: "quote.bubble").frame(maxWidth: .infinity, minHeight: 32) }
+            }.font(.subheadline)
+        }.modifier(PlayerActionsStyle())
+    }
+
     private func time(_ seconds: Double) -> String {
         guard seconds.isFinite, seconds >= 0 else { return "0:00" }
         let value = Int(seconds)
         return String(format: "%d:%02d", value / 60, value % 60)
+    }
+}
+
+private struct PlayerActionsStyle: ViewModifier {
+    @ViewBuilder func body(content: Content) -> some View {
+        if #available(iOS 26, *) { content.buttonStyle(.glass).controlSize(.regular) }
+        else { content.buttonStyle(.bordered).controlSize(.regular) }
     }
 }
