@@ -30,6 +30,9 @@ struct RiffApp: App {
     var body: some Scene {
         WindowGroup {
             RootView(library: model.library, playlists: model.playlists, downloads: model.downloads)
+                .onOpenURL { url in
+                    if url.isFileURL { Task { await model.library.importFiles([url]) } }
+                }
                 .tint(appearance.tint)
                 .preferredColorScheme(appearance.mode.colorScheme)
                 .onChange(of: scenePhase) { _, phase in

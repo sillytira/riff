@@ -11,7 +11,7 @@ struct LocalMetadata: Sendable {
 actor LocalMetadataReader {
     static let shared = LocalMetadataReader()
     func read(_ url: URL) async throws -> LocalMetadata {
-        if ["ogg", "opus", "wma", "ape", "wv", "tta", "mpc", "mpc8", "dsf", "dff"].contains(url.pathExtension.lowercased()) {
+        if ["ogg", "oga", "mka", "webm", "opus", "wma", "ape", "wv", "tta", "mpc", "mpc8", "dsf", "dff"].contains(url.pathExtension.lowercased()) {
             return try await readWithCodecs(url)
         }
         let asset = AVURLAsset(url: url)

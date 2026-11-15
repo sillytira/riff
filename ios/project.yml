@@ -45,6 +45,48 @@ targets:
       path: Riff/Info.plist
       properties:
         UIBackgroundModes: [audio]
+        LSSupportsOpeningDocumentsInPlace: true
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: Audio files
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes: [public.audio]
+        UTImportedTypeDeclarations:
+          - UTTypeIdentifier: org.xiph.ogg-audio
+            UTTypeDescription: Ogg audio
+            UTTypeConformsTo: [public.audio]
+            UTTypeTagSpecification:
+              public.filename-extension: [ogg, oga]
+          - UTTypeIdentifier: org.xiph.opus
+            UTTypeDescription: Opus audio
+            UTTypeConformsTo: [public.audio]
+            UTTypeTagSpecification:
+              public.filename-extension: [opus]
+          - UTTypeIdentifier: com.microsoft.windows-media-wma
+            UTTypeDescription: Windows Media audio
+            UTTypeConformsTo: [public.audio]
+            UTTypeTagSpecification:
+              public.filename-extension: [wma]
+          - UTTypeIdentifier: io.github.rootscripts.riff.ape-audio
+            UTTypeDescription: Monkey’s Audio
+            UTTypeConformsTo: [public.audio]
+            UTTypeTagSpecification:
+              public.filename-extension: [ape]
+          - UTTypeIdentifier: io.github.rootscripts.riff.wavpack-audio
+            UTTypeDescription: WavPack audio
+            UTTypeConformsTo: [public.audio]
+            UTTypeTagSpecification:
+              public.filename-extension: [wv]
+          - UTTypeIdentifier: io.github.rootscripts.riff.tta-audio
+            UTTypeDescription: True Audio
+            UTTypeConformsTo: [public.audio]
+            UTTypeTagSpecification:
+              public.filename-extension: [tta]
+          - UTTypeIdentifier: io.github.rootscripts.riff.musepack-audio
+            UTTypeDescription: Musepack audio
+            UTTypeConformsTo: [public.audio]
+            UTTypeTagSpecification:
+              public.filename-extension: [mpc, mpp, mp+]
         NSLocalNetworkUsageDescription: Riff connects to a local music server when you open its audio URL.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true

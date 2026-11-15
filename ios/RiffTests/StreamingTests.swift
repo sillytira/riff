@@ -19,13 +19,15 @@ final class StreamingTests: XCTestCase {
             XCTAssertEqual(chunk.count, 4096)
             XCTAssertGreaterThan(chunk.left.reduce(0) { $0 + Double($1 * $1) } / Double(chunk.count), 0.0001)
         }
-        let handle = try StreamDecoderHandle()
-        defer { handle.cancel() }
-        let decoder = StreamDecoder(handle: handle)
-        _ = try await decoder.open(url: root.appending(path: "ui-tone.wav"), headers: [:], position: 1)
-        let decoded = try await decoder.read()
-        let chunk = try XCTUnwrap(decoded)
-        XCTAssertEqual(chunk.position, 1, accuracy: 0.03)
+        for path in ["ui-tone.wav", "tagged.ogg", "tagged.opus"] {
+            let handle = try StreamDecoderHandle()
+            defer { handle.cancel() }
+            let decoder = StreamDecoder(handle: handle)
+            _ = try await decoder.open(url: root.appending(path: path), headers: [:], position: 0.7)
+            let decoded = try await decoder.read()
+            let chunk = try XCTUnwrap(decoded)
+            XCTAssertEqual(chunk.position, 0.7, accuracy: 0.03)
+        }
     }
 
     func testTLSVerificationRejectsUntrustedRootAndHLSChild() async throws {
