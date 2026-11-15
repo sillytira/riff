@@ -97,19 +97,20 @@ final class NavigationTests: XCTestCase {
         let search = app.searchFields.firstMatch
         XCTAssertTrue(search.waitForExistence(timeout: 5))
         search.tap()
-        search.typeText("http://127.0.0.1:8765/ui-tone.wav\n")
-        let result = app.staticTexts["ui-tone"].firstMatch
+        search.typeText("http://127.0.0.1:8765/ui-session.m4a\n")
+        let result = app.staticTexts["ui-session"].firstMatch
         XCTAssertTrue(result.waitForExistence(timeout: 30))
         result.tap()
         XCTAssertTrue(app.buttons["now-playing-open"].waitForExistence(timeout: 30))
         app.buttons["Download"].firstMatch.tap()
         app.tabBars.buttons["Downloads"].tap()
-        let downloadRow = app.cells.containing(.staticText, identifier: "ui-tone").firstMatch
+        let downloadRow = app.cells.containing(.staticText, identifier: "ui-session").firstMatch
         XCTAssertTrue(downloadRow.staticTexts["Saved offline"].waitForExistence(timeout: 30))
         app.tabBars.buttons["Library"].tap()
-        let saved = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "local-track-", "ui-tone")).firstMatch
+        let saved = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "local-track-", "ui-session")).firstMatch
         XCTAssertTrue(saved.waitForExistence(timeout: 10))
         saved.tap()
+        app.buttons["Pause"].tap()
         app.buttons["now-playing-open"].tap()
         XCTAssertTrue(app.navigationBars["Now Playing"].waitForExistence(timeout: 10))
         attach(app, name: "Now Playing")
@@ -125,7 +126,7 @@ final class NavigationTests: XCTestCase {
         app.terminate()
         app.launch()
         app.tabBars.buttons["Library"].tap()
-        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "local-track-", "ui-tone (edit)")).firstMatch.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "local-track-", "ui-session (edit)")).firstMatch.waitForExistence(timeout: 10))
     }
 
     private func attach(_ app: XCUIApplication, name: String) {
