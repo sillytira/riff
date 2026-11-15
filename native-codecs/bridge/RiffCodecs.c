@@ -444,8 +444,11 @@ static int stream_converted(RiffStreamDecoder *decoder, AVFrame *input) {
         decoder->skip_remaining -= skip;
         count -= skip;
         void *planes[] = { ((float *)audio[0]) + skip, ((float *)audio[1]) + skip };
-        result = av_audio_fifo_realloc(decoder->fifo, av_audio_fifo_size(decoder->fifo) + count);
-        if (result >= 0 && av_audio_fifo_write(decoder->fifo, planes, count) != count) result = AVERROR(EIO);
+        result = 0;
+        if (count > 0) {
+            result = av_audio_fifo_realloc(decoder->fifo, av_audio_fifo_size(decoder->fifo) + count);
+            if (result >= 0 && av_audio_fifo_write(decoder->fifo, planes, count) != count) result = AVERROR(EIO);
+        }
     }
     av_freep(&audio[0]);
     av_freep(&audio);

@@ -28,6 +28,19 @@ final class StreamingTests: XCTestCase {
         XCTAssertEqual(chunk.position, 1, accuracy: 0.03)
     }
 
+    func testCompressedStreamSeekCanDiscardWholePrerollFrames() async throws {
+        for ext in ["ogg", "opus"] {
+            let handle = try StreamDecoderHandle()
+            defer { handle.cancel() }
+            let decoder = StreamDecoder(handle: handle)
+            _ = try await decoder.open(url: try base().appending(path: "preroll." + ext), headers: [:], position: 0.7)
+            let decoded = try await decoder.read()
+            let chunk = try XCTUnwrap(decoded)
+            XCTAssertEqual(chunk.position, 0.7, accuracy: 0.04)
+            XCTAssertGreaterThan(chunk.left.reduce(0) { $0 + Double($1 * $1) } / Double(chunk.count), 0.0001)
+        }
+    }
+
     func testTLSVerificationRejectsUntrustedRootAndHLSChild() async throws {
         let urls = [URL(string: "https://127.0.0.1:8766/ui-tone.wav")!, try base().appending(path: "hls/untrusted-child.m3u8")]
         for url in urls {
