@@ -53,6 +53,14 @@ jobs:
           RIFF_UI_FIXTURE_PID=$!
           trap 'kill "$RIFF_UI_FIXTURE_PID"' EXIT
           xcodebuild -project Riff.xcodeproj -scheme Riff -destination "platform=iOS Simulator,id=$RIFF_DEVICE_ID" -parallel-testing-enabled NO -only-testing:RiffUITests -test-timeouts-enabled YES -default-test-execution-time-allowance 120 -maximum-test-execution-time-allowance 180 ARCHS="$(uname -m)" CODE_SIGNING_ALLOWED=NO -resultBundlePath build/UITests.xcresult test 2>&1 | tee build/ui-tests.log
+      - name: Export test summaries
+        if: always()
+        run: |
+          for RIFF_RESULT in NativeTests UITests; do
+            if [ -f "ios/build/$RIFF_RESULT.xcresult/Info.plist" ]; then
+              xcrun xcresulttool get test-results summary --path "ios/build/$RIFF_RESULT.xcresult" --format json > "ios/build/$RIFF_RESULT-summary.json"
+            fi
+          done
       - name: Export UI test screenshots
         if: always()
         run: |
@@ -68,6 +76,7 @@ jobs:
             ios/build/NativeTests.xcresult
             ios/build/UITests.xcresult
             ios/build/*.log
+            ios/build/*-summary.json
           if-no-files-found: ignore
       - name: Build unsigned device IPA
         run: ios/scripts/build-unsigned.sh
