@@ -263,6 +263,7 @@ done:
 #include <pthread.h>
 #include <strings.h>
 #include <math.h>
+#include <sys/stat.h>
 #include <libavutil/time.h>
 
 struct RiffStreamDecoder {
@@ -279,6 +280,7 @@ struct RiffStreamDecoder {
     int64_t skip_remaining;
     double requested_position, read_position, origin;
     char *headers;
+    char *local_path;
     char initial_host[1024];
     char initial_scheme[32];
     int initial_port;
@@ -318,12 +320,22 @@ void riff_decoder_destroy(RiffStreamDecoder *decoder) {
     avcodec_free_context(&decoder->codec);
     avformat_close_input(&decoder->source);
     av_free(decoder->headers);
+    av_free(decoder->local_path);
     free(decoder);
 }
 static int stream_io_open(AVFormatContext *format, AVIOContext **io, const char *url, int flags, AVDictionary **options) {
     RiffStreamDecoder *decoder = format->opaque;
     AVDictionary *local = NULL;
     if (!options) options = &local;
+    if (decoder->local_path) {
+        // Local audio cannot open playlists, remote URLs or unrelated child files.
+        if (strcmp(url, decoder->local_path)) return AVERROR(EACCES);
+        av_dict_set(options, "protocol_whitelist", "file", 0);
+        AVIOInterruptCB interrupt = { stream_interrupted, decoder };
+        int result = avio_open2(io, url, flags, &interrupt, options);
+        av_dict_free(&local);
+        return result;
+    }
     av_dict_set(options, "tls_verify", "1", 0);
     av_dict_set(options, "rw_timeout", "20000000", 0);
     av_dict_set(options, "protocol_whitelist", "http,https,tcp,tls,crypto,data", 0);
@@ -361,10 +373,15 @@ static int stream_io_open(AVFormatContext *format, AVIOContext **io, const char 
     av_dict_free(&local);
     return result;
 }
-int riff_decoder_open(RiffStreamDecoder *decoder, const char *url, const char *headers,
-                      double position, double *duration, char *error, size_t error_size) {
+static int decoder_open(RiffStreamDecoder *decoder, const char *url, const char *headers,
+                        double position, double *duration, char *error, size_t error_size, bool local) {
     if (!decoder || !url || !isfinite(position) || position < 0 || decoder->source) return AVERROR(EINVAL);
-    if (strncasecmp(url, "http://", 7) && strncasecmp(url, "https://", 8)) return AVERROR(EINVAL);
+    if (local) {
+        struct stat info;
+        if (*url != '/' || stat(url, &info) || !S_ISREG(info.st_mode)) return AVERROR(EINVAL);
+        decoder->local_path = av_strdup(url);
+        if (!decoder->local_path) return AVERROR(ENOMEM);
+    } else if (strncasecmp(url, "http://", 7) && strncasecmp(url, "https://", 8)) return AVERROR(EINVAL);
     pthread_once(&riff_network_once, riff_network_initialize);
     atomic_store(&decoder->deadline, av_gettime_relative() + 20000000);
     if (stream_interrupted(decoder)) return AVERROR_EXIT;
@@ -380,7 +397,8 @@ int riff_decoder_open(RiffStreamDecoder *decoder, const char *url, const char *h
     av_url_split(decoder->initial_scheme, sizeof(decoder->initial_scheme), NULL, 0, decoder->initial_host, sizeof(decoder->initial_host), &decoder->initial_port, NULL, 0, url);
     if (decoder->initial_port < 0) decoder->initial_port = !strcasecmp(decoder->initial_scheme, "https") ? 443 : 80;
     AVDictionary *options = NULL;
-    av_dict_set(&options, "protocol_whitelist", "http,https,tcp,tls,crypto,data", 0);
+    av_dict_set(&options, "protocol_whitelist", local ? "file" : "http,https,tcp,tls,crypto,data", 0);
+    if (local) av_dict_set(&options, "format_whitelist", "mov,mp3,ogg,flac,wav,aac,aiff,matroska,webm,ape,wv,tta,mpc,mpc8,dsf,dsdiff,asf", 0);
     av_dict_set(&options, "tls_verify", "1", 0);
     av_dict_set(&options, "http_persistent", "0", 0);
     av_dict_set(&options, "rw_timeout", "20000000", 0);
@@ -416,6 +434,33 @@ int riff_decoder_open(RiffStreamDecoder *decoder, const char *url, const char *h
     }
     return 0;
 }
+int riff_decoder_open(RiffStreamDecoder *decoder, const char *url, const char *headers,
+                      double position, double *duration, char *error, size_t error_size) {
+    return decoder_open(decoder, url, headers, position, duration, error, error_size, false);
+}
+int riff_decoder_open_file(RiffStreamDecoder *decoder, const char *path,
+                           double position, double *duration, char *error, size_t error_size) {
+    return decoder_open(decoder, path, NULL, position, duration, error, error_size, true);
+}
+const char *riff_decoder_metadata(RiffStreamDecoder *decoder, const char *key) {
+    if (!decoder || !decoder->source || !key) return NULL;
+    AVDictionaryEntry *entry = av_dict_get(decoder->source->metadata, key, NULL, 0);
+    if (!entry && decoder->stream_index >= 0 && decoder->stream_index < decoder->source->nb_streams)
+        entry = av_dict_get(decoder->source->streams[decoder->stream_index]->metadata, key, NULL, 0);
+    return entry ? entry->value : NULL;
+}
+const unsigned char *riff_decoder_artwork(RiffStreamDecoder *decoder, size_t *size) {
+    if (size) *size = 0;
+    if (!decoder || !decoder->source || !size) return NULL;
+    for (unsigned i = 0; i < decoder->source->nb_streams; ++i) {
+        AVStream *stream = decoder->source->streams[i];
+        if ((stream->disposition & AV_DISPOSITION_ATTACHED_PIC) && stream->attached_pic.size > 0 && stream->attached_pic.size <= 8 * 1024 * 1024) {
+            *size = stream->attached_pic.size;
+            return stream->attached_pic.data;
+        }
+    }
+    return NULL;
+}
 static int stream_converted(RiffStreamDecoder *decoder, AVFrame *input) {
     int result;
     if (!decoder->swr) {
@@ -444,8 +489,11 @@ static int stream_converted(RiffStreamDecoder *decoder, AVFrame *input) {
         decoder->skip_remaining -= skip;
         count -= skip;
         void *planes[] = { ((float *)audio[0]) + skip, ((float *)audio[1]) + skip };
-        result = av_audio_fifo_realloc(decoder->fifo, av_audio_fifo_size(decoder->fifo) + count);
-        if (result >= 0 && av_audio_fifo_write(decoder->fifo, planes, count) != count) result = AVERROR(EIO);
+        result = 0;
+        if (count > 0) {
+            result = av_audio_fifo_realloc(decoder->fifo, av_audio_fifo_size(decoder->fifo) + count);
+            if (result >= 0 && av_audio_fifo_write(decoder->fifo, planes, count) != count) result = AVERROR(EIO);
+        }
     }
     av_freep(&audio[0]);
     av_freep(&audio);

@@ -26,6 +26,14 @@ typedef struct RiffStreamDecoder RiffStreamDecoder;
 RiffStreamDecoder *riff_decoder_create(void);
 int riff_decoder_open(RiffStreamDecoder *, const char *url, const char *headers,
                       double position, double *duration, char *error, size_t error_size);
+/* Local files use a separate entry point and cannot invoke remote protocols or
+   playlist demuxers. Input must be an absolute regular-file path. */
+int riff_decoder_open_file(RiffStreamDecoder *, const char *path,
+                           double position, double *duration, char *error, size_t error_size);
+/* Borrowed metadata/artwork remains valid until decoder destruction. Calls must
+   be serialized with open/read. Artwork is capped at 8 MiB. */
+const char *riff_decoder_metadata(RiffStreamDecoder *, const char *key);
+const unsigned char *riff_decoder_artwork(RiffStreamDecoder *, size_t *size);
 int riff_decoder_read(RiffStreamDecoder *, float *left, float *right, int capacity,
                       double *position, char *error, size_t error_size);
 void riff_decoder_cancel(RiffStreamDecoder *);

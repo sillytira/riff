@@ -18,12 +18,17 @@ final class StreamDecoderHandle: @unchecked Sendable {
 }
 
 actor StreamDecoder {
+    private var sourceDuration: Double = 0
     private let handle: StreamDecoderHandle
     init(handle: StreamDecoderHandle) { self.handle = handle }
 
     func open(url: URL, headers: [String: String], position: Double) throws -> Double {
         try Task.checkCancellation()
-        guard ["https", "http"].contains(url.scheme?.lowercased() ?? ""), url.host != nil else { throw URLError(.unsupportedURL) }
+        if url.isFileURL {
+            guard headers.isEmpty, !url.path.contains("\0"), url.host == nil || url.host == "" || url.host == "localhost" else { throw URLError(.unsupportedURL) }
+        } else {
+            guard ["https", "http"].contains(url.scheme?.lowercased() ?? ""), url.host != nil else { throw URLError(.unsupportedURL) }
+        }
         for (key, value) in headers {
             guard !key.isEmpty, key.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-" || $0 == "_") }),
                   !value.contains("\r"), !value.contains("\n"), !value.contains("\0") else {
@@ -38,10 +43,27 @@ actor StreamDecoder {
         var message = [CChar](repeating: 0, count: capacity)
         let raw = url.absoluteString
         let address = url.scheme!.lowercased() + raw.dropFirst(url.scheme!.count)
-        let result = riff_decoder_open(handle.pointer, address, headerText, position, &duration, &message, capacity)
+        let result: Int32
+        if url.isFileURL { result = riff_decoder_open_file(handle.pointer, url.path, position, &duration, &message, capacity) }
+        else { result = riff_decoder_open(handle.pointer, address, headerText, position, &duration, &message, capacity) }
         try Task.checkCancellation()
         guard result >= 0 else { throw failure(message, fallback: "Could not open the audio stream.") }
-        return duration.isFinite ? max(0, duration) : 0
+        sourceDuration = duration.isFinite ? max(0, duration) : 0
+        return sourceDuration
+    }
+
+    func metadata() -> LocalMetadata {
+        func value(_ key: String) -> String? {
+            guard let text = riff_decoder_metadata(handle.pointer, key) else { return nil }
+            return String(cString: text)
+        }
+        var count = 0
+        let artwork: Data?
+        if let bytes = riff_decoder_artwork(handle.pointer, &count), count > 0 {
+            artwork = Data(bytes: bytes, count: count)
+        } else { artwork = nil }
+        return LocalMetadata(title: value("title"), artist: value("artist"), album: value("album"),
+                             duration: sourceDuration > 0 ? sourceDuration : nil, artwork: artwork)
     }
 
     func read() throws -> StreamChunk? {
