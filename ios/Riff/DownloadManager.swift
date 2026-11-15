@@ -247,6 +247,6 @@ final class DownloadManager {
     @discardableResult private func save() -> Bool {
         guard readable else { return false }
         do { try protectedDownloadWrite(JSONEncoder().encode(jobs), to: manifest); return true }
-        catch { error = "Could not save download progress: " + error.localizedDescription; return false }
+        catch { self.error = "Could not save download progress: " + error.localizedDescription; return false }
     }
 }
