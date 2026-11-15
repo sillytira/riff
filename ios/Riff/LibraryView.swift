@@ -43,6 +43,8 @@ struct LibraryView: View {
                                 Image(systemName: "play.fill").foregroundStyle(.secondary)
                             }
                         }
+                        .buttonStyle(.plain)
+                        .task(id: track.id) { library.prepareArtwork(for: track) }
                         .accessibilityIdentifier("local-track-" + track.id.uuidString)
                         .listRowBackground(Color.clear)
                         .contextMenu {

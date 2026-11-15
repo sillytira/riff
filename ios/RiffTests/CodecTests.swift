@@ -4,6 +4,13 @@ import XCTest
 
 @MainActor
 final class CodecTests: XCTestCase {
+    func testCodecLicenseTextsAreBundledWithTheApp() throws {
+        for name in ["FFmpeg-LGPL-2.1", "LAME-LGPL", "Opus-BSD"] {
+            let url = try XCTUnwrap(Bundle.main.url(forResource: name, withExtension: "txt", subdirectory: "Licenses"))
+            XCTAssertGreaterThan(try Data(contentsOf: url).count, 300)
+        }
+    }
+
     func testEncodedFormatsDecodeToAudibleAudioOnIPhone() async throws {
         let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

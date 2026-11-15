@@ -121,7 +121,21 @@ final class NavigationTests: XCTestCase {
         app.buttons["Audio Editor"].tap()
         XCTAssertTrue(app.navigationBars["Audio Editor"].waitForExistence(timeout: 10))
         app.buttons["Save selection as WAV"].tap()
-        XCTAssertTrue(app.buttons["Share exported audio"].waitForExistence(timeout: 30))
+        let shared = app.buttons["Share exported audio"]
+        let wavReady = shared.waitForExistence(timeout: 30)
+        if !wavReady { attach(app, name: "WAV export unavailable") }
+        XCTAssertTrue(wavReady)
+        let format = app.buttons["export-format"]
+        for _ in 0..<3 {
+            if format.isHittable { break }
+            app.swipeUp()
+        }
+        format.tap()
+        app.buttons["MP3"].tap()
+        app.buttons["Save selection as MP3"].tap()
+        let mp3Ready = shared.waitForExistence(timeout: 30)
+        if !mp3Ready { attach(app, name: "MP3 export unavailable") }
+        XCTAssertTrue(mp3Ready)
         attach(app, name: "Audio Editor")
         app.terminate()
         app.launch()

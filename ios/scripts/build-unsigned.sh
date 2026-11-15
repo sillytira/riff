@@ -8,7 +8,7 @@ fi
 xcodegen generate
 xcodebuild -project Riff.xcodeproj -scheme Riff -configuration Release \
   -sdk iphoneos -destination 'generic/platform=iOS' \
-  -derivedDataPath build CODE_SIGNING_ALLOWED=NO build
+  -derivedDataPath build CODE_SIGNING_ALLOWED=NO CURRENT_PROJECT_VERSION="${GITHUB_RUN_NUMBER:-1}" build
 mkdir -p build/package/Payload
 cp -R build/Build/Products/Release-iphoneos/Riff.app build/package/Payload/
 (cd build/package && zip -qr ../Riff-unsigned.ipa Payload)

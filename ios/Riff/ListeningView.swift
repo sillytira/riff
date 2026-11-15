@@ -23,6 +23,12 @@ struct ListeningView: View {
                     Spacer()
                 }.foregroundStyle(.primary)
             }
+            .buttonStyle(.plain)
+            .task(id: entry.id) {
+                if case .local(let id) = entry.source, let track = library.tracks.first(where: { $0.id == id }) {
+                    library.prepareArtwork(for: track)
+                }
+            }
             .contextMenu {
                 Button(library.listening.isFavorite(entry.source) ? "Remove from Favorites" : "Add to Favorites", systemImage: "heart") {
                     library.toggleFavorite(entry.source)

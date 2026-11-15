@@ -97,7 +97,7 @@ enum LyricsMatching {
         // Compare explicit feature credits as well as punctuation/spacing variants.
         let candidateArtist = match.artistName.replacingOccurrences(of: #"(?i)\s+(?:feat\.?|ft\.?|featuring)\s+.*$"#, with: "", options: .regularExpression)
         let requestedArtist = identity.artist.replacingOccurrences(of: #"(?i)\s+(?:feat\.?|ft\.?|featuring)\s+.*$"#, with: "", options: .regularExpression)
-        return artist.isEmpty || normalized(candidateArtist) == normalized(requestedArtist)
+        return !artist.isEmpty && normalized(candidateArtist) == normalized(requestedArtist)
     }
     static func document(_ match: LyricsMatch, duration: Double, forcePlain: Bool = false) -> LyricsDocument {
         let timingMatches = !forcePlain && (duration <= 0 || match.duration == nil || abs((match.duration ?? duration) - duration) <= max(12, duration * 0.08))

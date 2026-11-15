@@ -82,12 +82,10 @@ struct AudioEditorView: View {
                                 ForEach([96000, 128000, 192000, 256000, 320000], id: \.self) { Text("\($0 / 1000) kbps").tag($0) }
                             }.disabled(exporting)
                         }
-                        Button("Save selection as " + format.title, systemImage: "waveform") { export(url: url, track: track) }.disabled(exporting)
                         if exporting {
                             ProgressView("Rendering audio…")
-                            Button("Cancel export", role: .cancel) { exportTask?.cancel() }
                         }
-                        if let exported { ShareLink("Share exported audio", item: exported) }
+                        if exported != nil { Label("Saved to library", systemImage: "checkmark.circle").foregroundStyle(.secondary) }
                         if let error { Text(error).foregroundStyle(.red) }
                     } header: { Text("Export") } footer: { Text("The exported selection is saved as a new track. The original audio is preserved.") }
                 }
@@ -104,6 +102,20 @@ struct AudioEditorView: View {
                 ContentUnavailableView("Choose an offline audio file", systemImage: "waveform", description: Text("Play an imported or directly downloaded audio file to trim it and export effects."))
             }
         }.navigationTitle("Audio Editor")
+        .toolbar {
+            if let track = selectedTrack, let url = library.editableURL(for: track) {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    if exporting {
+                        Button("Cancel export", systemImage: "xmark.circle") { exportTask?.cancel() }
+                    } else {
+                        Button("Save selection as " + format.title, systemImage: "checkmark") { export(url: url, track: track) }
+                    }
+                    if let exported {
+                        ShareLink(item: exported) { Label("Share exported audio", systemImage: "square.and.arrow.up") }
+                    }
+                }
+            }
+        }
         .onDisappear { if exporting { exportTask?.cancel() } }
     }
 

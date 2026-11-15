@@ -337,7 +337,7 @@ final class AudioLibrary: NSObject {
 
     func play(_ track: LocalTrack, preserveQueue: Bool = false) {
         _ = lifecycle
-        repairArtwork(for: track)
+        prepareArtwork(for: track)
         if !preserveQueue {
             playbackQueue = PlaybackQueue(entries: tracks.map { PlaylistEntry(id: $0.id, source: .local($0.id)) }, currentID: track.id)
         }
@@ -384,7 +384,7 @@ final class AudioLibrary: NSObject {
         } catch { self.error = error.localizedDescription }
     }
 
-    private func repairArtwork(for track: LocalTrack) {
+    func prepareArtwork(for track: LocalTrack) {
         guard track.artworkURL == nil, let source = track.webpageURL, artworkRepairs.insert(track.id).inserted else { return }
         Task { @MainActor [weak self] in
             defer { self?.artworkRepairs.remove(track.id) }

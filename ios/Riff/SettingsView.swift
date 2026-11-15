@@ -28,7 +28,8 @@ struct SettingsView: View {
                 Text("Sign in if YouTube asks for verification. Your sign-in is saved securely and used for YouTube requests.")
             }
             Section("About") {
-                LabeledContent("Riff", value: "0.7.5 · iOS development")
+                LabeledContent("Riff", value: version)
+                NavigationLink("Audio codec licenses") { CodecLicensesView() }
                 Link("Source code", destination: URL(string: "https://github.com/sillytira/riff")!)
             }
         }
@@ -47,6 +48,10 @@ struct SettingsView: View {
         .alert("Account error", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
             Button("OK") { error = nil }
         } message: { Text(error ?? "") }
+    }
+    private var version: String {
+        let info = Bundle.main.infoDictionary ?? [:]
+        return (info["CFBundleShortVersionString"] as? String ?? "Development") + " (" + (info["CFBundleVersion"] as? String ?? "1") + ")"
     }
     private func refresh() {
         let data = try? YouTubeCredentials.read()

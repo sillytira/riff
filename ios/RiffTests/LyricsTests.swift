@@ -2,6 +2,11 @@ import XCTest
 @testable import Riff
 
 final class LyricsTests: XCTestCase {
+    func testUnknownArtistDoesNotAutomaticallyChooseAnotherRecording() {
+        let match = LyricsMatch(id: 1, trackName: "Home", artistName: "Another Artist", albumName: nil, duration: 200, syncedLyrics: nil, plainLyrics: "Words")
+        XCTAssertFalse(LyricsMatching.isStrongMatch(match, identity: LyricsIdentity(title: "Home", artist: "")))
+    }
+
     func testMultipleTimestampsFractionsOffsetAndUnicode() {
         let document = LyricsDocument.parse("[offset:-500]\n[00:01.50][00:03.250]مرحبا\n[00:02.7]Hello")
         XCTAssertEqual(document.lines.map(\.time), [1, 2.2, 2.75])
