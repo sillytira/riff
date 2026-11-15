@@ -2,6 +2,27 @@ import XCTest
 
 @MainActor
 final class NavigationTests: XCTestCase {
+    func testArtworkFromDownloadedMetadataIsVisibleInLibraryAndPlayer() {
+        let app = XCUIApplication()
+        app.launch()
+        app.tabBars.buttons["Discover"].tap()
+        let search = app.searchFields.firstMatch
+        search.tap()
+        search.typeText("http://127.0.0.1:8765/tagged.m4a\n")
+        XCTAssertTrue(app.staticTexts["tagged"].firstMatch.waitForExistence(timeout: 30))
+        app.buttons["Download"].firstMatch.tap()
+        app.tabBars.buttons["Downloads"].tap()
+        XCTAssertTrue(app.staticTexts["Saved offline"].waitForExistence(timeout: 30))
+        app.tabBars.buttons["Library"].tap()
+        let track = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "local-track-", "Metadata Test Song")).firstMatch
+        XCTAssertTrue(track.waitForExistence(timeout: 15))
+        attach(app, name: "Library with embedded cover")
+        track.tap()
+        app.buttons["now-playing-open"].tap()
+        XCTAssertTrue(app.navigationBars["Now Playing"].waitForExistence(timeout: 10))
+        attach(app, name: "Now Playing with embedded cover")
+    }
+
     func testLibraryDiscoverAndDownloadsAreReachable() {
         let app = XCUIApplication()
         app.launch()
@@ -72,9 +93,10 @@ final class NavigationTests: XCTestCase {
         XCTAssertTrue(app.buttons["now-playing-open"].waitForExistence(timeout: 30))
         app.buttons["Download"].firstMatch.tap()
         app.tabBars.buttons["Downloads"].tap()
-        XCTAssertTrue(app.staticTexts["Saved offline"].waitForExistence(timeout: 30))
+        let downloadRow = app.cells.containing(.staticText, identifier: "ui-tone").firstMatch
+        XCTAssertTrue(downloadRow.staticTexts["Saved offline"].waitForExistence(timeout: 30))
         app.tabBars.buttons["Library"].tap()
-        let saved = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "local-track-")).firstMatch
+        let saved = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "local-track-", "ui-tone")).firstMatch
         XCTAssertTrue(saved.waitForExistence(timeout: 10))
         saved.tap()
         app.buttons["now-playing-open"].tap()

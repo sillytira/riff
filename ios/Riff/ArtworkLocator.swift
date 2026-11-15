@@ -3,11 +3,13 @@ import Foundation
 actor ArtworkLocator {
     static let shared = ArtworkLocator()
     static func youtubeThumbnail(for source: String) -> String? {
-        guard let components = URLComponents(string: source), let host = components.host?.lowercased() else { return nil }
+        guard let components = URLComponents(string: source), ["http", "https"].contains(components.scheme?.lowercased() ?? ""), let host = components.host?.lowercased() else { return nil }
         let id: String?
         if host == "youtu.be" { id = components.path.split(separator: "/").first.map(String.init) }
         else if host == "youtube.com" || host.hasSuffix(".youtube.com") {
-            id = components.queryItems?.first(where: { $0.name == "v" })?.value
+            let parts = components.path.split(separator: "/")
+            let pathID = parts.count >= 2 && ["shorts", "embed", "live"].contains(String(parts[0])) ? String(parts[1]) : nil
+            id = components.queryItems?.first(where: { $0.name == "v" })?.value ?? pathID
         } else { return nil }
         guard let id, id.range(of: #"^[A-Za-z0-9_-]{11}$"#, options: .regularExpression) != nil else { return nil }
         return "https://i.ytimg.com/vi/" + id + "/hqdefault.jpg"

@@ -1,4 +1,5 @@
 import Foundation
+import MediaPlayer
 import ImageIO
 import XCTest
 @testable import Riff
@@ -44,6 +45,20 @@ final class ArtworkCacheTests: XCTestCase {
         let data = try await ArtworkCache.shared.imageData(for: artwork, pixelSize: 100)
         XCTAssertNotNil(CGImageSourceCreateWithData(data as CFData, nil))
         XCTAssertEqual(AudioLibrary(root: root).tracks.first?.artworkURL, artwork)
+        library.play(track)
+        defer { if library.isPlaying { library.togglePlayback() } }
+        for _ in 0..<50 {
+            if MPNowPlayingInfoCenter.default().nowPlayingInfo?[MPMediaItemPropertyArtwork] is MPMediaItemArtwork { break }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        XCTAssertTrue(MPNowPlayingInfoCenter.default().nowPlayingInfo?[MPMediaItemPropertyArtwork] is MPMediaItemArtwork)
+    }
+
+    func testYouTubeFallbackRejectsUnrelatedHostsAndHandlesSupportedLinks() {
+        XCTAssertEqual(ArtworkLocator.youtubeThumbnail(for: "https://youtu.be/abcdefghijk"), "https://i.ytimg.com/vi/abcdefghijk/hqdefault.jpg")
+        XCTAssertNotNil(ArtworkLocator.youtubeThumbnail(for: "https://www.youtube.com/shorts/abcdefghijk"))
+        XCTAssertNil(ArtworkLocator.youtubeThumbnail(for: "https://youtube.com.evil.example/watch?v=abcdefghijk"))
+        XCTAssertNil(ArtworkLocator.youtubeThumbnail(for: "file://youtube.com/watch?v=abcdefghijk"))
     }
 
     func testRemoteArtworkRemainsAvailableWithNetworkDisabled() async throws {
