@@ -60,7 +60,7 @@ final class LibraryManagementTests: XCTestCase {
         XCTAssertTrue(AudioLibrary(root: root).tracks.isEmpty)
         let restoredPlaylist = try XCTUnwrap(PlaylistStore(root: root).playlists.first { $0.id == playlistID })
         XCTAssertEqual(restoredPlaylist.entries.first?.id, entryID)
-        guard case .online(let replacement) = restoredPlaylist.entries.first?.source else { return XCTFail("The playlist must keep its online source") }
+        guard case .online(let replacement)? = restoredPlaylist.entries.first?.source else { return XCTFail("The playlist must keep its online source") }
         XCTAssertEqual(replacement.webpageURL, online.webpageURL)
         let restoredListening = ListeningStore(root: root)
         XCTAssertEqual(restoredListening.favorites.count, 1)
