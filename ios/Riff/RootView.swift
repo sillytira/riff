@@ -113,29 +113,29 @@ struct NowPlayingView: View {
                         TrackArtwork(url: library.current?.artworkURL ?? library.onlineCurrent?.artworkURL,
                                      size: max(160, min(280, geometry.size.width - 48, geometry.size.height * 0.34)))
                             .padding(.top, 8)
-                    VStack(spacing: 8) {
-                        Text(library.playingTitle ?? "Riff").font(.title2.bold()).multilineTextAlignment(.center)
-                        Text(library.playingArtist).foregroundStyle(.secondary)
-                    }
-                    TimelineView(.periodic(from: .now, by: 0.5)) { _ in
-                        VStack {
-                            Slider(value: Binding(get: { min(max(0, library.elapsed), max(1, library.duration)) }, set: { library.seek(to: $0) }), in: 0...max(1, library.duration))
-                                .disabled(library.duration == 0).accessibilityLabel("Playback position")
-                            HStack {
-                                Text(time(library.elapsed))
-                                Spacer()
-                                Text(time(library.duration))
-                            }.font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                        VStack(spacing: 8) {
+                            Text(library.playingTitle ?? "Riff").font(.title2.bold()).multilineTextAlignment(.center)
+                            Text(library.playingArtist).foregroundStyle(.secondary)
                         }
-                    }
-                    transport
-                    if #available(iOS 26, *) {
-                        GlassEffectContainer(spacing: 12) { secondaryControls }
-                    } else { secondaryControls }
-                    if let track = library.onlineCurrent {
-                        Button("Save offline", systemImage: "arrow.down.circle") { downloads.download(track, into: library) }
-                            .buttonStyle(.bordered)
-                    }
+                        TimelineView(.periodic(from: .now, by: 0.5)) { _ in
+                            VStack {
+                                Slider(value: Binding(get: { min(max(0, library.elapsed), max(1, library.duration)) }, set: { library.seek(to: $0) }), in: 0...max(1, library.duration))
+                                    .disabled(library.duration == 0).accessibilityLabel("Playback position")
+                                HStack {
+                                    Text(time(library.elapsed))
+                                    Spacer()
+                                    Text(time(library.duration))
+                                }.font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                            }
+                        }
+                        transport
+                        if #available(iOS 26, *) {
+                            GlassEffectContainer(spacing: 12) { secondaryControls }
+                        } else { secondaryControls }
+                        if let track = library.onlineCurrent {
+                            Button("Save offline", systemImage: "arrow.down.circle") { downloads.download(track, into: library) }
+                                .buttonStyle(.bordered)
+                        }
                     }.padding(.horizontal, 24).padding(.bottom, 20)
                 }
             }
@@ -180,7 +180,7 @@ struct NowPlayingView: View {
                     Label("Repeat: " + library.repeatMode.rawValue, systemImage: library.repeatMode == .one ? "repeat.1" : "repeat")
                 }
                 AudioRoutePicker().frame(width: 44, height: 44).accessibilityLabel("Audio output")
-            }.labelStyle(.iconOnly)
+            }.labelStyle(.iconOnly).controlSize(.large)
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
                 NavigationLink { AudioEditorView(library: library) } label: { Label("Audio Editor", systemImage: "waveform.path").frame(maxWidth: .infinity, minHeight: 32) }
                 NavigationLink { EffectsView(library: library) } label: { Label("Audio Effects", systemImage: "slider.horizontal.3").frame(maxWidth: .infinity, minHeight: 32) }
