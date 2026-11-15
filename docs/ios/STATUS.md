@@ -141,6 +141,7 @@ Spotify OAuth URL handling). These failures have not been represented as passes.
 An isolated branch `codec/native` builds checksum-pinned FFmpeg 8.0.1, LAME and
 Opus for Apple Silicon host, iPhone and simulator. It includes a cancellation-aware
 C conversion API, MP3/FLAC/M4A/Opus conversion checks, metadata retention checks and
-FLAC sample equality checks. This work is still under build validation and is not
-linked into the app yet. The app still exports WAV only. Do not mark the format
+FLAC sample equality checks. Run 43671363635 passed host conversion, metadata, lossless-sample equality,
+existing-file preservation and cancellation checks, then built the iPhone and
+simulator libraries. It is not linked into the app yet. The app still exports WAV only. Do not mark the format
 conversion or streaming DSP gates complete.

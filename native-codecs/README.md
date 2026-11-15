@@ -21,7 +21,10 @@ The full application source and pinned dependency build inputs must remain
 available to allow relinking modified LGPL components when distributing Riff.
 No GPL or nonfree FFmpeg configuration is enabled.
 
-The next integration step is a cancellation-aware C bridge, decoding/playback
-through the existing native effects graph, and native unit/device validation.
+The cancellation-aware C conversion bridge is included in the library. macOS run
+https://github.com/sillytira/riff/actions/runs/43671363635 passed actual conversion,
+metadata, FLAC sample equality, existing-output protection and cancellation checks,
+then built both iPhone and simulator slices. The next step is app integration,
+decoding/playback through the native effects graph, and native app/device tests.
 Host command-line binaries exist only for build validation and are never shipped
 or executed in the iPhone app.
