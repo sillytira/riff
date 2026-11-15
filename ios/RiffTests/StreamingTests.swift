@@ -28,6 +28,17 @@ final class StreamingTests: XCTestCase {
         XCTAssertEqual(chunk.position, 1, accuracy: 0.03)
     }
 
+    func testAACEncoderDelayDoesNotAbortInitialPlayback() async throws {
+        let handle = try StreamDecoderHandle()
+        defer { handle.cancel() }
+        let decoder = StreamDecoder(handle: handle)
+        _ = try await decoder.open(url: try base().appending(path: "aac-priming.m4a"), headers: [:], position: 0)
+        let decoded = try await decoder.read()
+        let chunk = try XCTUnwrap(decoded)
+        XCTAssertEqual(chunk.position, 0, accuracy: 0.03)
+        XCTAssertGreaterThan(chunk.left.reduce(0) { $0 + Double($1 * $1) } / Double(chunk.count), 0.0001)
+    }
+
     func testCompressedStreamSeekCanDiscardWholePrerollFrames() async throws {
         for ext in ["ogg", "opus"] {
             let handle = try StreamDecoderHandle()
