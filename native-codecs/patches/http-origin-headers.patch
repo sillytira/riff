@@ -1,0 +1,56 @@
+--- a/libavformat/http.c
++++ b/libavformat/http.c
+@@ -370,6 +370,43 @@
+ }
+ 
+ /* return non zero if error */
++/* Riff modified 2026-11-15: do not forward caller-supplied credentials across redirect origins. */
++static int riff_http_redirect_headers(HTTPContext *s, const char *destination)
++{
++    char old_scheme[32], new_scheme[32], old_host[1024], new_host[1024];
++    int old_port, new_port;
++    const char *line;
++    char *filtered, *output;
++    if (!s->headers)
++        return 0;
++    av_url_split(old_scheme, sizeof(old_scheme), NULL, 0, old_host, sizeof(old_host), &old_port, NULL, 0, s->location);
++    av_url_split(new_scheme, sizeof(new_scheme), NULL, 0, new_host, sizeof(new_host), &new_port, NULL, 0, destination);
++    if (old_port < 0) old_port = !av_strcasecmp(old_scheme, "https") ? 443 : 80;
++    if (new_port < 0) new_port = !av_strcasecmp(new_scheme, "https") ? 443 : 80;
++    if (!av_strcasecmp(old_scheme, new_scheme) && !av_strcasecmp(old_host, new_host) && old_port == new_port)
++        return 0;
++    output = filtered = av_malloc(strlen(s->headers) + 1);
++    if (!filtered)
++        return AVERROR(ENOMEM);
++    for (line = s->headers; *line;) {
++        const char *end = strchr(line, '\n');
++        size_t length = end ? (size_t)(end - line + 1) : strlen(line);
++        const char *colon = memchr(line, ':', length);
++        size_t key = colon ? (size_t)(colon - line) : 0;
++        int sensitive = (key == 6 && !av_strncasecmp(line, "Cookie", key)) ||
++                        (key == 7 && !av_strncasecmp(line, "Cookie2", key)) ||
++                        (key == 13 && !av_strncasecmp(line, "Authorization", key)) ||
++                        (key == 19 && !av_strncasecmp(line, "Proxy-Authorization", key));
++        if (!sensitive) { memcpy(output, line, length); output += length; }
++        if (!end) break;
++        line = end + 1;
++    }
++    *output = 0;
++    av_free(s->headers);
++    s->headers = filtered;
++    return 0;
++}
++
+ static int http_open_cnx(URLContext *h, AVDictionary **options)
+ {
+     HTTPAuthType cur_auth_type, cur_proxy_auth_type;
+@@ -463,6 +500,9 @@
+             redirect_cache_set(s, s->location, s->new_location, s->expires);
+         }
+ 
++        ret = riff_http_redirect_headers(s, s->new_location);
++        if (ret < 0)
++            return ret;
+         av_free(s->location);
+         s->location = s->new_location;
+         s->new_location = NULL;

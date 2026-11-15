@@ -1,0 +1,28 @@
+name: Live music provider checks
+on:
+  workflow_dispatch:
+  push:
+    branches: ['provider/**']
+    paths: ['test/ios-provider-smoke.py', '.github/workflows/provider-smoke.yml']
+permissions:
+  contents: read
+jobs:
+  providers:
+    runs-on: macos-26
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned extraction dependencies
+        run: python3 -m pip install --target "$RUNNER_TEMP/riff-provider-packages" 'yt-dlp==2026.10.26' 'yt-dlp-ejs==0.8.0' 'certifi==2026.10.23'
+      - name: Check real provider search, resolution and media access
+        env:
+          PYTHONPATH: ${{ runner.temp }}/riff-provider-packages
+        run: |
+          node --version
+          python3 test/ios-provider-smoke.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Provider-check-results
+          path: provider-results.json
+          if-no-files-found: error

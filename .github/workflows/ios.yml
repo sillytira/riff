@@ -1,0 +1,118 @@
+name: iOS build
+on:
+  workflow_dispatch:
+  push:
+    branches: ['ios/**']
+    paths: ['ios/**', 'native-codecs/**', '.github/workflows/ios.yml']
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show Xcode version
+        run: xcodebuild -version
+      - name: Install project generator
+        run: brew install xcodegen cmake pkgconf openssl@3
+      - uses: actions/cache/restore@v4
+        id: codecs-cache
+        with:
+          path: |
+            native-codecs/build/RiffCodecs.xcframework
+            native-codecs/build/Licenses
+          key: riff-ios-codecs-xcode26-${{ runner.arch }}-${{ hashFiles('native-codecs/build.sh', 'native-codecs/bridge/RiffCodecs.*', 'native-codecs/patches/**') }}
+      - name: Build native audio codecs
+        if: steps.codecs-cache.outputs.cache-hit != 'true'
+        run: |
+          if ! native-codecs/build.sh > native-codec-ios.log 2>&1; then tail -80 native-codec-ios.log; exit 1; fi
+      - uses: actions/cache/save@v4
+        if: steps.codecs-cache.outputs.cache-hit != 'true'
+        with:
+          path: |
+            native-codecs/build/RiffCodecs.xcframework
+            native-codecs/build/Licenses
+          key: ${{ steps.codecs-cache.outputs.cache-primary-key }}
+      - name: Prepare standalone extraction runtime
+        run: ios/scripts/prepare-python.sh
+      - name: Test extraction protocol
+        run: PYTHONPATH=ios/PythonApp:ios/Dependencies/python-packages python3 -m unittest discover -s ios/PythonTests -v
+      - name: Compile for simulator
+        working-directory: ios
+        run: |
+          xcodegen generate
+          xcodebuild -project Riff.xcodeproj -scheme Riff -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' ARCHS="$(uname -m)" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- build
+      - name: Boot iPhone simulator
+        timeout-minutes: 10
+        run: |
+          RIFF_DEVICE_ID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(v["udid"] for group in reversed(list(d["devices"].values())) for v in group if v["name"].startswith("iPhone")))')
+          echo "RIFF_DEVICE_ID=$RIFF_DEVICE_ID" >> "$GITHUB_ENV"
+          xcrun simctl bootstatus "$RIFF_DEVICE_ID" -b
+      - name: Test native services on iPhone
+        timeout-minutes: 10
+        working-directory: ios
+        run: |
+          set -o pipefail
+          mkdir -p build
+          "$(brew --prefix openssl@3)/bin/openssl" req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=localhost -addext 'subjectAltName=DNS:localhost,IP:127.0.0.1' -keyout build/test-server-key.pem -out build/test-server-cert.pem > build/fixture-cert.log 2>&1
+          python3 scripts/fixture-server.py --port 8765 --directory RiffTests/Fixtures > build/fixture-server.log 2>&1 &
+          RIFF_FIXTURE_PID=$!
+          python3 scripts/fixture-server.py --port 8766 --directory RiffTests/Fixtures --tls-cert build/test-server-cert.pem --tls-key build/test-server-key.pem > build/fixture-tls-server.log 2>&1 &
+          RIFF_TLS_FIXTURE_PID=$!
+          trap 'kill "$RIFF_FIXTURE_PID" "$RIFF_TLS_FIXTURE_PID"' EXIT
+          xcodebuild -project Riff.xcodeproj -scheme Riff -destination "platform=iOS Simulator,id=$RIFF_DEVICE_ID" -parallel-testing-enabled NO -only-testing:RiffTests -test-timeouts-enabled YES -default-test-execution-time-allowance 120 -maximum-test-execution-time-allowance 180 ARCHS="$(uname -m)" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- -resultBundlePath build/NativeTests.xcresult test 2>&1 | tee build/native-tests.log
+      - name: Test native interface on iPhone
+        timeout-minutes: 10
+        working-directory: ios
+        run: |
+          set -o pipefail
+          python3 scripts/fixture-server.py --port 8765 --directory RiffTests/Fixtures > build/ui-fixture-server.log 2>&1 &
+          RIFF_UI_FIXTURE_PID=$!
+          trap 'kill "$RIFF_UI_FIXTURE_PID"' EXIT
+          xcodebuild -project Riff.xcodeproj -scheme Riff -destination "platform=iOS Simulator,id=$RIFF_DEVICE_ID" -parallel-testing-enabled NO -only-testing:RiffUITests -test-timeouts-enabled YES -default-test-execution-time-allowance 120 -maximum-test-execution-time-allowance 180 ARCHS="$(uname -m)" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- -resultBundlePath build/UITests.xcresult test 2>&1 | tee build/ui-tests.log
+      - name: Export background transfer diagnostics
+        if: always() && env.RIFF_DEVICE_ID != ''
+        run: |
+          mkdir -p ios/build
+          xcrun simctl spawn "$RIFF_DEVICE_ID" log show --last 15m --style compact --predicate 'process == "nsurlsessiond" AND eventMessage CONTAINS[c] "riff"' > ios/build/background-session.log 2>&1 || true
+          RIFF_APP_DATA=$(xcrun simctl get_app_container "$RIFF_DEVICE_ID" io.github.rootscripts.riff.ios data 2>/dev/null || true)
+          if [ -n "$RIFF_APP_DATA" ]; then
+            python3 ios/scripts/download-diagnostics.py "$RIFF_APP_DATA" ios/build/download-summary.json
+          fi
+      - name: Export test summaries
+        if: always()
+        run: |
+          for RIFF_RESULT in NativeTests UITests; do
+            if [ -f "ios/build/$RIFF_RESULT.xcresult/Info.plist" ]; then
+              xcrun xcresulttool get test-results summary --path "ios/build/$RIFF_RESULT.xcresult" --format json > "ios/build/$RIFF_RESULT-summary.json"
+            fi
+          done
+      - name: Export UI test screenshots
+        if: always()
+        run: |
+          if [ -f ios/build/UITests.xcresult/Info.plist ]; then
+            xcrun xcresulttool export attachments --path ios/build/UITests.xcresult --output-path ios/build/screenshots
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Native-validation
+          path: |
+            ios/build/screenshots
+            ios/build/NativeTests.xcresult
+            ios/build/UITests.xcresult
+            ios/build/*.log
+            native-codec-ios.log
+            ios/build/*-summary.json
+          if-no-files-found: ignore
+      - name: Build unsigned device IPA
+        run: ios/scripts/build-unsigned.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Riff-unsigned
+          path: ios/build/Riff-unsigned.ipa
+          if-no-files-found: error

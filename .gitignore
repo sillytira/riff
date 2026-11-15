@@ -13,3 +13,11 @@ yt-cookies.txt
 .yt-logged-out
 *.log
 .DS_Store
+
+# Native iOS build products
+/ios/build/
+/ios/*.xcodeproj/
+
+/ios/Riff/Info.plist
+/ios/Dependencies/
+__pycache__/
