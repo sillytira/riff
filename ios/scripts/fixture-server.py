@@ -41,7 +41,8 @@ class MediaHandler(http.server.SimpleHTTPRequestHandler):
         if not os.path.isfile(path):
             return super().send_head()
         file = open(path, 'rb')
-        length = os.fstat(file.fileno()).st_size
+        stat = os.fstat(file.fileno())
+        length = stat.st_size
         header = self.headers.get('Range')
         start, end = 0, length - 1
         if header:
@@ -67,6 +68,8 @@ class MediaHandler(http.server.SimpleHTTPRequestHandler):
         self.send_response(206 if header else 200)
         self.send_header('Content-Type', self.guess_type(path))
         self.send_header('Accept-Ranges', 'bytes')
+        self.send_header('Last-Modified', self.date_time_string(stat.st_mtime))
+        self.send_header('ETag', f'"{stat.st_mtime_ns:x}-{length:x}"')
         self.send_header('Content-Length', str(max(0, end - start + 1)))
         if header:
             self.send_header('Content-Range', f'bytes {start}-{end}/{length}')
@@ -85,7 +88,7 @@ class MediaHandler(http.server.SimpleHTTPRequestHandler):
                     break
                 outputfile.write(data)
                 self.remaining -= len(data)
-                if self.slow: time.sleep(0.03)
+                if self.slow: time.sleep(0.2)
         except (BrokenPipeError, ConnectionResetError):
             # AVPlayer intentionally cancels speculative reads when seeking.
             pass
