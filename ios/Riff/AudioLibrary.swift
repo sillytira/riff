@@ -13,6 +13,7 @@ struct LocalTrack: Codable, Identifiable {
     var duration: Double? = nil
     var metadataIndexed: Bool? = nil
     var sourceProvider: String? = nil
+    var playbackFilename: String? = nil
 }
 
 /// Owns sandbox copies: access to the original Files provider is needed only during import.
@@ -120,7 +121,7 @@ final class AudioLibrary: NSObject {
             }
         } catch { self.error = error.localizedDescription; effectsWritable = false }
         for track in tracks where track.metadataIndexed != true && track.assetRelativePath == nil {
-            enqueueMetadata(id: track.id, url: root.appending(path: track.filename))
+            enqueueMetadata(id: track.id, url: root.appending(path: track.playbackFilename ?? track.filename))
         }
     }
 
@@ -221,23 +222,32 @@ final class AudioLibrary: NSObject {
 
     func editableURL(for track: LocalTrack) -> URL? {
         guard track.assetRelativePath == nil else { return nil }
-        return directory.appending(path: track.filename)
+        return directory.appending(path: track.playbackFilename ?? track.filename)
     }
 
-    func importEditedFile(_ source: URL, original: LocalTrack) throws {
+    func importEditedFile(_ source: URL, original: LocalTrack, playableCopy: URL? = nil) throws {
         guard manifestIsReadable else { throw ExtractionError(message: "The library index is unreadable; existing data was preserved.") }
         let id = UUID()
-        let filename = id.uuidString + ".wav"
+        let ext = source.pathExtension.lowercased()
+        guard ["wav", "mp3", "flac", "m4a", "opus"].contains(ext) else { throw ExtractionError(message: "Choose a supported audio export format.") }
+        let filename = id.uuidString + "." + ext
         let destination = directory.appending(path: filename)
+        let playbackName = playableCopy == nil ? nil : id.uuidString + "-decoded.wav"
+        let playbackDestination = playbackName.map { directory.appending(path: $0) }
         do {
             try FileManager.default.copyItem(at: source, to: destination)
-            _ = try AVAudioFile(forReading: destination)
-            let edited = LocalTrack(id: id, name: original.name + " (edit)", filename: filename, artist: original.artist, artworkURL: original.artworkURL)
+            if let playableCopy, let playbackDestination { try FileManager.default.copyItem(at: playableCopy, to: playbackDestination) }
+            _ = try AVAudioFile(forReading: playbackDestination ?? destination)
+            var edited = LocalTrack(id: id, name: original.name + " (edit)", filename: filename, artist: original.artist, artworkURL: original.artworkURL)
+            edited.album = original.album
+            edited.playbackFilename = playbackName
             let updated = tracks + [edited]
             try JSONEncoder().encode(updated).write(to: manifest, options: .atomic)
             tracks = updated
+            enqueueMetadata(id: id, url: playbackDestination ?? destination)
         } catch {
             try? FileManager.default.removeItem(at: destination)
+            if let playbackDestination { try? FileManager.default.removeItem(at: playbackDestination) }
             throw error
         }
     }
@@ -355,7 +365,7 @@ final class AudioLibrary: NSObject {
                 commands.update()
                 return
             }
-            let next = try NativeAudioPlayer(contentsOf: directory.appending(path: track.filename))
+            let next = try NativeAudioPlayer(contentsOf: directory.appending(path: track.playbackFilename ?? track.filename))
             next.settings = effects
             next.onFinish = { [weak self] in
                 guard let self else { return }

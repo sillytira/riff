@@ -9,7 +9,7 @@ typedef struct RiffConversion RiffConversion;
 RiffConversion *riff_conversion_create(void);
 /* Run once on a worker executor. Cancellation/progress may be called concurrently.
    Input/output must be distinct local paths. Output must not already exist.
-   format: mp3, flac, m4a or opus. bitrate is bits/sec for lossy encoders. */
+   format: wav (float PCM), mp3, flac, m4a or opus. bitrate is bits/sec for lossy encoders. */
 int riff_conversion_run(RiffConversion *, const char *input, const char *output,
                         const char *format, int bitrate, const char *title,
                         const char *artist, const char *album, char *error, size_t error_size);

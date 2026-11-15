@@ -2,6 +2,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 command -v xcodegen >/dev/null || { echo 'Install XcodeGen: brew install xcodegen' >&2; exit 1; }
+if [ ! -d ../native-codecs/build/RiffCodecs.xcframework ]; then
+  ../native-codecs/build.sh
+fi
 xcodegen generate
 xcodebuild -project Riff.xcodeproj -scheme Riff -configuration Release \
   -sdk iphoneos -destination 'generic/platform=iOS' \

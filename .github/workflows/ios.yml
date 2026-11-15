@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   push:
     branches: ['ios/**']
-    paths: ['ios/**', '.github/workflows/ios.yml']
+    paths: ['ios/**', 'native-codecs/**', '.github/workflows/ios.yml']
 concurrency:
   group: ios-${{ github.ref }}
   cancel-in-progress: true
@@ -12,13 +12,31 @@ permissions:
 jobs:
   build:
     runs-on: macos-26
-    timeout-minutes: 40
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - name: Show Xcode version
         run: xcodebuild -version
       - name: Install project generator
-        run: brew install xcodegen
+        run: brew install xcodegen cmake pkgconf
+      - uses: actions/cache/restore@v4
+        id: codecs-cache
+        with:
+          path: |
+            native-codecs/build/RiffCodecs.xcframework
+            native-codecs/build/Licenses
+          key: riff-ios-codecs-xcode26-${{ runner.arch }}-${{ hashFiles('native-codecs/build.sh', 'native-codecs/bridge/RiffCodecs.*') }}
+      - name: Build native audio codecs
+        if: steps.codecs-cache.outputs.cache-hit != 'true'
+        run: |
+          if ! native-codecs/build.sh > native-codec-ios.log 2>&1; then tail -80 native-codec-ios.log; exit 1; fi
+      - uses: actions/cache/save@v4
+        if: steps.codecs-cache.outputs.cache-hit != 'true'
+        with:
+          path: |
+            native-codecs/build/RiffCodecs.xcframework
+            native-codecs/build/Licenses
+          key: ${{ steps.codecs-cache.outputs.cache-primary-key }}
       - name: Prepare standalone extraction runtime
         run: ios/scripts/prepare-python.sh
       - name: Test extraction protocol
@@ -76,6 +94,7 @@ jobs:
             ios/build/NativeTests.xcresult
             ios/build/UITests.xcresult
             ios/build/*.log
+            native-codec-ios.log
             ios/build/*-summary.json
           if-no-files-found: ignore
       - name: Build unsigned device IPA

@@ -146,6 +146,7 @@ int riff_conversion_run(RiffConversion *job, const char *input, const char *outp
     else if (!strcmp(format, "flac")) { codec_name = "flac"; muxer = "flac"; }
     else if (!strcmp(format, "m4a")) { codec_name = "aac"; muxer = "ipod"; }
     else if (!strcmp(format, "opus")) { codec_name = "libopus"; muxer = "ogg"; }
+    else if (!strcmp(format, "wav")) { codec_name = "pcm_f32le"; muxer = "wav"; }
     else goto done;
     if (interrupted(job)) { result = AVERROR_EXIT; goto done; }
     stage = "Open source audio";

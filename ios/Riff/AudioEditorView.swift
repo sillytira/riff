@@ -35,6 +35,9 @@ struct AudioEditorView: View {
     @State private var duration = 1.0
     @State private var peaks: [Float] = []
     @State private var includeEffects = true
+    @State private var format: AudioExportFormat = .wav
+    @State private var bitrate = 192000
+    @State private var exportTask: Task<Void, Never>?
     @State private var exporting = false
     @State private var exported: URL?
     @State private var error: String?
@@ -71,8 +74,19 @@ struct AudioEditorView: View {
                     }
                     Section {
                         Toggle("Apply current audio effects", isOn: $includeEffects)
-                        Button("Save selection as WAV", systemImage: "waveform") { export(url: url, track: track) }.disabled(exporting)
-                        if exporting { ProgressView("Rendering audio…") }
+                        Picker("Format", selection: $format) {
+                            ForEach(AudioExportFormat.allCases, id: \.self) { Text($0.title).tag($0) }
+                        }.disabled(exporting).accessibilityIdentifier("export-format")
+                        if format != .wav && format != .flac {
+                            Picker("Audio quality", selection: $bitrate) {
+                                ForEach([96000, 128000, 192000, 256000, 320000], id: \.self) { Text("\($0 / 1000) kbps").tag($0) }
+                            }.disabled(exporting)
+                        }
+                        Button("Save selection as " + format.title, systemImage: "waveform") { export(url: url, track: track) }.disabled(exporting)
+                        if exporting {
+                            ProgressView("Rendering audio…")
+                            Button("Cancel export", role: .cancel) { exportTask?.cancel() }
+                        }
                         if let exported { ShareLink("Share exported audio", item: exported) }
                         if let error { Text(error).foregroundStyle(.red) }
                     } header: { Text("Export") } footer: { Text("The exported selection is saved as a new track. The original audio is preserved.") }
@@ -90,23 +104,46 @@ struct AudioEditorView: View {
                 ContentUnavailableView("Choose an offline audio file", systemImage: "waveform", description: Text("Play an imported or directly downloaded audio file to trim it and export effects."))
             }
         }.navigationTitle("Audio Editor")
+        .onDisappear { if exporting { exportTask?.cancel() } }
     }
 
     private func export(url: URL, track: LocalTrack) {
         exporting = true
+        exported = nil
         error = nil
         let selectedStart = self.start, selectedEnd = self.end
         let settings = includeEffects ? library.effects : AudioEffectSettings()
-        Task {
+        let selectedFormat = format, selectedBitrate = bitrate
+        exportTask = Task {
+            let folder = FileManager.default.temporaryDirectory.appending(path: "RiffExports/" + UUID().uuidString)
             do {
-                let folder = FileManager.default.temporaryDirectory.appending(path: "RiffExports")
                 try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-                let output = folder.appending(path: UUID().uuidString + ".wav")
-                try await AudioProcessor.shared.exportWAV(input: url, output: output, start: selectedStart, end: selectedEnd, settings: settings)
-                try library.importEditedFile(output, original: track)
+                let rendered = folder.appending(path: "selection.wav")
+                try await AudioProcessor.shared.exportWAV(input: url, output: rendered, start: selectedStart, end: selectedEnd, settings: settings)
+                let output: URL
+                var playableCopy: URL?
+                if selectedFormat == .wav { output = rendered }
+                else {
+                    output = folder.appending(path: "selection." + selectedFormat.rawValue)
+                    try await CodecService.shared.convert(input: rendered, output: output, format: selectedFormat, bitrate: selectedBitrate,
+                                                         title: track.name + " (edit)", artist: track.artist ?? "", album: track.album ?? "")
+                    if selectedFormat == .opus {
+                        let decoded = folder.appending(path: "playback.wav")
+                        try await CodecService.shared.convert(input: output, output: decoded, format: .wav)
+                        playableCopy = decoded
+                    }
+                    try? FileManager.default.removeItem(at: rendered)
+                }
+                try Task.checkCancellation()
+                try library.importEditedFile(output, original: track, playableCopy: playableCopy)
+                if let playableCopy { try? FileManager.default.removeItem(at: playableCopy) }
                 exported = output
-            } catch { self.error = error.localizedDescription }
+            } catch {
+                try? FileManager.default.removeItem(at: folder)
+                if !(error is CancellationError) { self.error = error.localizedDescription }
+            }
             exporting = false
+            exportTask = nil
         }
     }
 }

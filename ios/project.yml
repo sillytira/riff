@@ -21,8 +21,20 @@ targets:
   Riff:
     type: application
     platform: iOS
-    sources: [Riff]
+    sources:
+      - path: Riff
+      - path: ../native-codecs/build/Licenses
+        type: folder
+        buildPhase: resources
     dependencies:
+      - framework: ../native-codecs/build/RiffCodecs.xcframework
+        embed: false
+      - sdk: Security.framework
+      - sdk: CoreFoundation.framework
+      - sdk: AudioToolbox.framework
+      - sdk: libz.tbd
+      - sdk: libbz2.tbd
+      - sdk: libiconv.tbd
       - framework: Dependencies/Python.xcframework
         embed: true
     postCompileScripts:
