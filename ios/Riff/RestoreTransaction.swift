@@ -41,7 +41,8 @@ actor RestoreTransaction {
             guard journal.id == id else { throw BackupError.invalid }
             journal.committed = true
             try write(JSONEncoder().encode(journal), to: journalURL)
-            try FileManager.default.removeItem(at: journalURL)
+            // The restore is committed. Cleanup can be retried at next launch.
+            try? FileManager.default.removeItem(at: journalURL)
         } catch {
             let originalError = error
             try recover()
@@ -70,7 +71,7 @@ actor RestoreTransaction {
         guard FileManager.default.fileExists(atPath: journalURL.path) else { return }
         // Decode and validate every path before changing any files. A corrupt
         // journal is retained for recovery instead of being treated as empty.
-        let journal = try readJournal()
+        var journal = try readJournal()
         for original in journal.originals { _ = try location(original.area, original.filename) }
         if !journal.committed {
             for original in journal.originals {
@@ -79,7 +80,11 @@ actor RestoreTransaction {
                 else if FileManager.default.fileExists(atPath: target.path) { try FileManager.default.removeItem(at: target) }
             }
         }
-        try FileManager.default.removeItem(at: journalURL)
+        if !journal.committed {
+            journal.committed = true
+            try write(JSONEncoder().encode(journal), to: journalURL)
+        }
+        try? FileManager.default.removeItem(at: journalURL)
     }
 
     private func readJournal() throws -> Journal {
