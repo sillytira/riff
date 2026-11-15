@@ -54,14 +54,14 @@ build_target() {
   cmake --install "$work/opus"
   (
     cd "$work/ffmpeg"
-    local programs=(--disable-programs) cross=(--enable-cross-compile --target-os=darwin --arch=aarch64)
-    if [ "$sdk" = macosx ]; then programs=(--enable-ffmpeg --enable-ffprobe); cross=(--target-os=darwin --arch=aarch64); fi
+    local programs=(--disable-programs --disable-avfilter) cross=(--enable-cross-compile --target-os=darwin --arch=aarch64)
+    if [ "$sdk" = macosx ]; then programs=(--enable-ffmpeg --enable-ffprobe --enable-avfilter --enable-filter=abuffer,abuffersink,aformat,aresample,anull,atrim,asetpts); cross=(--target-os=darwin --arch=aarch64); fi
     PKG_CONFIG_LIBDIR="$prefix/lib/pkgconfig" "$RIFF_CODEC_BUILD/sources/ffmpeg/configure" \
       --prefix="$prefix" --cc="$compiler" --sysroot="$sysroot" "${cross[@]}" \
       --extra-cflags="$flags -I$prefix/include" --extra-ldflags="$flags -L$prefix/lib" \
       --pkg-config-flags=--static --enable-static --disable-shared --enable-pic \
       --disable-autodetect --disable-doc --disable-debug --enable-small \
-      --disable-everything --disable-avdevice --disable-avfilter --disable-swscale \
+      --disable-everything --disable-avdevice --disable-swscale \
       "${programs[@]}" --enable-avcodec --enable-avformat --enable-swresample \
       --enable-network --enable-securetransport --enable-libmp3lame --enable-libopus \
       --enable-protocol=file,http,https,tcp,tls,crypto,data \
