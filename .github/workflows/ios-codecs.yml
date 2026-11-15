@@ -1,0 +1,41 @@
+name: Native iOS codecs
+on:
+  workflow_dispatch:
+  push:
+    branches: ['codec/**']
+    paths: ['native-codecs/**', '.github/workflows/ios-codecs.yml']
+permissions:
+  contents: read
+concurrency:
+  group: codecs-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  codecs:
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build tools
+        run: brew install cmake pkgconf
+      - uses: actions/cache@v4
+        with:
+          path: native-codecs/build/sources
+          key: riff-codec-sources-ffmpeg801-lame1f5cc948-opus152
+      - name: Compile and test host audio codecs
+        run: |
+          native-codecs/build.sh host > native-codec-host.log 2>&1
+          native-codecs/smoke.sh 2>&1 | tee native-codec-smoke.log
+      - name: Compile iPhone and simulator libraries
+        run: native-codecs/build.sh > native-codec-ios.log 2>&1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Native-codec-logs
+          path: native-codec-*.log
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RiffCodecs
+          path: |
+            native-codecs/build/RiffCodecs.xcframework
+            native-codecs/build/Licenses
+            native-codecs/README.md
