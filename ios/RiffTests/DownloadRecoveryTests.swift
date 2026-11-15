@@ -9,12 +9,16 @@ final class DownloadRecoveryTests: XCTestCase {
         let library = AudioLibrary(root: root.appending(path: "library"))
         let service = try BackgroundTransfers(root: root.appending(path: "downloads"), identifier: "io.github.rootscripts.riff.test." + UUID().uuidString)
         defer { service.invalidate() }
-        let manager = DownloadManager(library: library, root: root.appending(path: "downloads"), transfers: service)
-        await manager.reconnect()
         let base = try XCTUnwrap(ProcessInfo.processInfo.environment["RIFF_FIXTURE_SERVER"])
         let url = try XCTUnwrap(URL(string: base + "/ui-session.m4a"))
         let identity = TransferIdentity(job: UUID(), attempt: UUID())
+        let track = OnlineTrack(id: "background", title: "Background song", artist: "Riff", webpageURL: url.absoluteString, artworkURL: nil, duration: 180, provider: "Generic")
+        var job = DownloadJob(id: identity.job, track: track)
+        job.attempt = identity.attempt; job.ext = "m4a"; job.state = .downloading
+        try protectedDownloadWrite(JSONEncoder().encode([job]), to: root.appending(path: "downloads/jobs.json"))
         _ = service.startDirect(URLRequest(url: url), identity: identity)
+        let manager = DownloadManager(library: library, root: root.appending(path: "downloads"), transfers: service)
+        await manager.reconnect()
         for _ in 0..<600 {
             if manager.jobs.first?.state == .saved || manager.jobs.first?.state == .failed { break }
             try await Task.sleep(for: .milliseconds(50))
