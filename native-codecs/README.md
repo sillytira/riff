@@ -28,3 +28,11 @@ then built both iPhone and simulator slices. The next step is app integration,
 decoding/playback through the native effects graph, and native app/device tests.
 Host command-line binaries exist only for build validation and are never shipped
 or executed in the iPhone app.
+
+Streaming uses the same native effects graph with bounded PCM buffering. Every
+HLS subrequest verifies TLS. The tracked HTTP patch removes caller-supplied
+Authorization/Cookie headers when FFmpeg follows a redirect to a different
+origin; the native IO callback also scopes those headers for playlist children.
+Source archives are re-extracted and the tracked patches reapplied before each
+build, including when the archive cache is restored. Native tests cover these
+network behaviors with loopback fixtures.

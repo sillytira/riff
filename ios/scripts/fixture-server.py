@@ -5,6 +5,7 @@ import functools
 import http.server
 import os
 import re
+import ssl
 
 
 class MediaHandler(http.server.SimpleHTTPRequestHandler):
@@ -12,6 +13,27 @@ class MediaHandler(http.server.SimpleHTTPRequestHandler):
 
     def send_head(self):
         self.remaining = None
+        if self.path == '/redirect-cross-host':
+            self.send_response(302)
+            self.send_header('Location', 'http://localhost:8765/no-auth/ui-tone.wav')
+            self.send_header('Content-Length', '0')
+            self.end_headers()
+            return None
+        if self.path.startswith('/no-auth/'):
+            if self.headers.get('Authorization') or self.headers.get('Cookie'):
+                self.send_error(403, 'Credentials must not cross origins')
+                return None
+            self.path = self.path.removeprefix('/no-auth')
+        if self.path in ['/hls/untrusted-child.m3u8', '/hls/cross-origin.m3u8']:
+            if 'untrusted' in self.path: target = 'https://127.0.0.1:8766/hls/segment0.ts'
+            else: target = 'http://localhost:8765/no-auth/hls/segment0.ts'
+            data = ('#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:1\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:0.511,\n' + target + '\n#EXT-X-ENDLIST\n').encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/vnd.apple.mpegurl')
+            self.send_header('Content-Length', str(len(data)))
+            self.end_headers()
+            if self.command != 'HEAD': self.wfile.write(data)
+            return None
         path = self.translate_path(self.path)
         if not os.path.isfile(path):
             return super().send_head()
@@ -69,6 +91,12 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--port', type=int, default=8765)
     parser.add_argument('--directory', default='ios/RiffTests/Fixtures')
+    parser.add_argument('--tls-cert')
+    parser.add_argument('--tls-key')
     args = parser.parse_args()
     server = http.server.ThreadingHTTPServer(('127.0.0.1', args.port), functools.partial(MediaHandler, directory=args.directory))
+    if args.tls_cert:
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain(args.tls_cert, args.tls_key)
+        server.socket = context.wrap_socket(server.socket, server_side=True)
     server.serve_forever()

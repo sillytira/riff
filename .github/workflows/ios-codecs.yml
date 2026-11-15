@@ -19,8 +19,8 @@ jobs:
         run: brew install cmake pkgconf
       - uses: actions/cache@v4
         with:
-          path: native-codecs/build/sources
-          key: riff-codec-sources-ffmpeg801-lame1f5cc948-opus152-release
+          path: native-codecs/build/sources/*.tar.gz
+          key: riff-codec-sources-ffmpeg801-lame1f5cc948-opus152-release-${{ hashFiles('native-codecs/patches/**') }}
       - name: Compile and test host audio codecs
         run: |
           set -o pipefail

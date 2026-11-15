@@ -18,6 +18,18 @@ double riff_conversion_progress(const RiffConversion *);
 /* Destroy only after run and all concurrent progress/cancel calls have ended. */
 void riff_conversion_destroy(RiffConversion *);
 const char *riff_codecs_version(void);
+
+/* Cancellation may run concurrently. All other decoder calls must be serialized.
+   Output is planar Float32 stereo at 48 kHz. Read returns frames, zero at EOF,
+   or a negative error. An opened decoder is single-use; seek opens a new one. */
+typedef struct RiffStreamDecoder RiffStreamDecoder;
+RiffStreamDecoder *riff_decoder_create(void);
+int riff_decoder_open(RiffStreamDecoder *, const char *url, const char *headers,
+                      double position, double *duration, char *error, size_t error_size);
+int riff_decoder_read(RiffStreamDecoder *, float *left, float *right, int capacity,
+                      double *position, char *error, size_t error_size);
+void riff_decoder_cancel(RiffStreamDecoder *);
+void riff_decoder_destroy(RiffStreamDecoder *);
 #ifdef __cplusplus
 }
 #endif

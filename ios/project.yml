@@ -45,6 +45,7 @@ targets:
       path: Riff/Info.plist
       properties:
         UIBackgroundModes: [audio]
+        NSLocalNetworkUsageDescription: Riff connects to a local music server when you open its audio URL.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
     settings:
@@ -54,7 +55,9 @@ targets:
   RiffTests:
     type: bundle.unit-test
     platform: iOS
-    sources: [RiffTests]
+    sources:
+      - path: RiffTests
+        excludes: [Fixtures/hls]
     dependencies:
       - target: Riff
   RiffUITests:

@@ -10,14 +10,17 @@ fetch() {
   local archive="$RIFF_CODEC_BUILD/sources/$name.tar.gz"
   if [ ! -f "$archive" ]; then curl --fail --location --retry 3 "$url" -o "$archive"; fi
   echo "$checksum  $archive" | shasum -a 256 -c -
-  if [ ! -d "$RIFF_CODEC_BUILD/sources/$name" ]; then
-    mkdir -p "$RIFF_CODEC_BUILD/sources/$name"
-    tar -xzf "$archive" --strip-components=1 -C "$RIFF_CODEC_BUILD/sources/$name"
-  fi
+  rm -rf "$RIFF_CODEC_BUILD/sources/$name"
+  mkdir -p "$RIFF_CODEC_BUILD/sources/$name"
+  tar -xzf "$archive" --strip-components=1 -C "$RIFF_CODEC_BUILD/sources/$name"
 }
 fetch ffmpeg https://codeload.github.com/FFmpeg/FFmpeg/tar.gz/refs/tags/n8.0.1 679aa13a19415d5ddab91e580084e3ab20c963c8240001e5cbb955a97bdd81b1
 fetch lame https://codeload.github.com/lameproject/lame/tar.gz/1f5cc9487284d5950343aa5d4f70de433468070a b6b8a1e8e10a1353966345a5cd5efb10147afd1f26103951aa3dc36f2eb900dd
 fetch opus https://downloads.xiph.org/releases/opus/opus-1.5.2.tar.gz 65c1d2f78b9f2fb20082c38cbe47c951ad5839345876e46941612ee87f9a7ce1
+
+for RIFF_PATCH in "$RIFF_CODEC_ROOT"/patches/*.patch; do
+  patch -p1 -d "$RIFF_CODEC_BUILD/sources/ffmpeg" < "$RIFF_PATCH"
+done
 
 build_target() {
   local sdk="$1" arch=arm64 minimum compiler sysroot flags prefix work

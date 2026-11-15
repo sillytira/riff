@@ -35,6 +35,7 @@ final class AudioLibrary: NSObject {
     var effects = AudioEffectSettings() {
         didSet {
             player?.settings = effects
+            networkPlayer?.settings = effects
             if isPlaying { streamPlayer?.rate = effects.rate }
             if playingTitle != nil { commands.update() }
             persistEffects()
@@ -47,6 +48,7 @@ final class AudioLibrary: NSObject {
     @ObservationIgnored private lazy var lifecycle = PlaybackLifecycle(library: self)
     @ObservationIgnored private lazy var commands = PlaybackCommands(library: self)
     @ObservationIgnored private var streamPlayer: AVPlayer?
+    @ObservationIgnored private var networkPlayer: NativeStreamingPlayer?
     @ObservationIgnored private var monitor: Task<Void, Never>?
     @ObservationIgnored private var endObserver: NSObjectProtocol?
     @ObservationIgnored private var generation = UUID()
@@ -70,18 +72,20 @@ final class AudioLibrary: NSObject {
     var playingTitle: String? { current?.name ?? onlineCurrent?.title }
     var playingArtist: String { current?.artist ?? onlineCurrent?.artist ?? "" }
     var elapsed: Double {
-        let value = streamPlayer?.currentTime().seconds ?? player?.currentTime ?? 0
+        let value = networkPlayer?.elapsed ?? streamPlayer?.currentTime().seconds ?? player?.currentTime ?? 0
         return value.isFinite ? max(0, value) : 0
     }
     var duration: Double {
-        let value = streamPlayer?.currentItem?.duration.seconds ?? player?.duration ?? 0
+        let value = networkPlayer?.duration ?? streamPlayer?.currentItem?.duration.seconds ?? player?.duration ?? 0
         if value.isFinite, value > 0 { return value }
         let metadata = current?.duration ?? onlineCurrent?.duration ?? 0
         return metadata.isFinite ? max(0, metadata) : 0
     }
 
     func seek(to value: Double) {
+        guard value.isFinite, duration > 0 else { return }
         let seconds = min(max(0, value), duration)
+        if let networkPlayer { networkPlayer.seek(to: seconds); commands.update(); return }
         streamPlayer?.seek(to: CMTime(seconds: seconds, preferredTimescale: 600))
         player?.currentTime = seconds
         commands.update()
@@ -262,6 +266,8 @@ final class AudioLibrary: NSObject {
         monitor = nil
         player?.stop()
         player = nil
+        networkPlayer?.stop()
+        networkPlayer = nil
         streamPlayer?.pause()
         streamPlayer = nil
         if let endObserver { NotificationCenter.default.removeObserver(endObserver) }
@@ -385,7 +391,7 @@ final class AudioLibrary: NSObject {
         tracks = updated
     }
 
-    func playOnline(_ track: OnlineTrack, queue: [OnlineTrack]? = nil, preserveQueue: Bool = false) async {
+    func playOnline(_ track: OnlineTrack, queue: [OnlineTrack]? = nil, preserveQueue: Bool = false, startingAt position: Double = 0) async {
         _ = lifecycle
         if !preserveQueue {
             let entries = (queue ?? [track]).map { PlaylistEntry(source: .online($0)) }
@@ -398,6 +404,9 @@ final class AudioLibrary: NSObject {
         generation = request
         monitor?.cancel()
         player?.stop()
+        player = nil
+        networkPlayer?.stop()
+        networkPlayer = nil
         streamPlayer?.pause()
         streamPlayer = nil
         current = nil
@@ -415,33 +424,36 @@ final class AudioLibrary: NSObject {
             }
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
             try AVAudioSession.sharedInstance().setActive(true)
-            let asset = AVURLAsset(url: url, options: ["AVURLAssetHTTPHeaderFieldsKey": media.headers])
-            let item = AVPlayerItem(asset: asset)
-            let streaming = AVPlayer(playerItem: item)
-            streamPlayer = streaming
-            observeEnd(of: item)
-            streaming.currentItem?.audioTimePitchAlgorithm = .spectral
-            streaming.playImmediately(atRate: effects.rate)
-            isPlaying = true
-            commands.update()
-            monitor = Task { @MainActor [weak self] in
-                var recorded = false
-                while !Task.isCancelled {
-                    try? await Task.sleep(for: .seconds(1))
-                    guard !Task.isCancelled, let self, self.generation == request else { return }
-                    if !recorded, item.status == .readyToPlay, self.elapsed > 0 {
-                        self.listening.record(.online(self.onlineCurrent ?? track))
-                        recorded = true
-                    }
-                    if item.status == .failed {
-                        self.error = item.error?.localizedDescription ?? "The audio stream failed."
-                        self.isPlaying = false
-                        return
-                    }
-                }
+            let streaming = try NativeStreamingPlayer(duration: onlineCurrent?.duration, settings: effects)
+            streaming.onFinish = { [weak self] in
+                guard let self, self.generation == request else { return }
+                self.isPlaying = false
+                self.commands.update()
+                self.next(automatic: true)
             }
+            streaming.onBuffering = { [weak self] value in
+                guard let self, self.generation == request else { return }
+                self.isLoading = value
+                self.commands.update()
+            }
+            streaming.onError = { [weak self] error in
+                guard let self, self.generation == request else { return }
+                if self.isPlaying { self.error = error.localizedDescription }
+                self.isPlaying = false
+                self.commands.update()
+            }
+            networkPlayer = streaming
+            try await streaming.prepare(url: url, headers: media.headers, position: position)
+            guard generation == request else { streaming.stop(); return }
+            isPlaying = true
+            listening.record(.online(onlineCurrent ?? track))
+            commands.update()
         } catch {
-            if generation == request { self.error = error.localizedDescription }
+            if generation == request {
+                isPlaying = false
+                if !(error is CancellationError) { self.error = error.localizedDescription }
+                commands.update()
+            }
         }
     }
 
@@ -453,6 +465,12 @@ final class AudioLibrary: NSObject {
         }
         generation = UUID()
         monitor?.cancel()
+        networkPlayer?.stop()
+        networkPlayer = nil
+        player?.stop()
+        player = nil
+        current = nil
+        isPlaying = false
         streamPlayer?.pause()
         streamPlayer = nil
         onlineCurrent = nil
@@ -469,7 +487,8 @@ final class AudioLibrary: NSObject {
                 streamPlayer = AVPlayer(playerItem: item)
                 observeEnd(of: item)
                 current = track
-                streamPlayer?.play()
+                item.audioTimePitchAlgorithm = .spectral
+                streamPlayer?.playImmediately(atRate: effects.rate)
                 isPlaying = true
                 listening.record(.local(track.id))
                 commands.update()
@@ -491,7 +510,7 @@ final class AudioLibrary: NSObject {
             if !isPlaying { throw PlaybackError.unavailable }
             listening.record(.local(track.id))
             commands.update()
-        } catch { self.error = error.localizedDescription }
+        } catch { self.isPlaying = false; self.error = error.localizedDescription; commands.clear() }
     }
 
     func prepareArtwork(for track: LocalTrack) {
@@ -513,6 +532,22 @@ final class AudioLibrary: NSObject {
     }
 
     func togglePlayback() {
+        if let networkPlayer {
+            if isPlaying { networkPlayer.pause(); isPlaying = false }
+            else if networkPlayer.needsRefresh, let track = onlineCurrent {
+                let position = networkPlayer.hasEnded ? 0 : networkPlayer.elapsed
+                Task { await playOnline(track, preserveQueue: true, startingAt: position) }
+                return
+            } else {
+                do {
+                    try AVAudioSession.sharedInstance().setActive(true)
+                    try networkPlayer.resume()
+                    isPlaying = true
+                } catch { error = error.localizedDescription }
+            }
+            commands.update()
+            return
+        }
         if let streaming = streamPlayer {
             if isPlaying { streaming.pause() } else { streaming.playImmediately(atRate: effects.rate) }
             isPlaying.toggle()

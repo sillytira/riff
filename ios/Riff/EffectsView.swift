@@ -5,7 +5,7 @@ struct EffectsView: View {
     @State private var simple = false
     var body: some View {
         Form {
-            if library.onlineCurrent != nil || library.current?.assetRelativePath != nil {
+            if library.current?.assetRelativePath != nil {
                 Section { Text("Download a direct audio file to use EQ, pitch, reverb and distortion. Playback speed also works while streaming.").foregroundStyle(.secondary) }
             }
             Section("Playback") {

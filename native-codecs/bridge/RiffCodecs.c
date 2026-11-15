@@ -259,3 +259,244 @@ done:
     if (result < 0 && output_created) remove(output);
     return result;
 }
+
+#include <pthread.h>
+#include <strings.h>
+#include <math.h>
+#include <libavutil/time.h>
+
+struct RiffStreamDecoder {
+    atomic_bool cancelled;
+    _Atomic int64_t deadline;
+    AVFormatContext *source;
+    AVCodecContext *codec;
+    AVPacket *packet;
+    AVFrame *frame;
+    SwrContext *swr;
+    AVAudioFifo *fifo;
+    int stream_index;
+    bool demux_eof, drain_sent, decoded_eof, timeline_ready;
+    int64_t skip_remaining;
+    double requested_position, read_position, origin;
+    char *headers;
+    char initial_host[1024];
+    char initial_scheme[32];
+    int initial_port;
+};
+static pthread_once_t riff_network_once = PTHREAD_ONCE_INIT;
+static void riff_network_initialize(void) {
+    avformat_network_init();
+    // Provider URLs can contain access signatures. Return sanitized stage/error
+    // messages through the API instead of emitting FFmpeg's raw URL diagnostics.
+    av_log_set_level(AV_LOG_QUIET);
+}
+static int stream_interrupted(void *opaque) {
+    RiffStreamDecoder *decoder = opaque;
+    return atomic_load(&decoder->cancelled) || av_gettime_relative() > atomic_load(&decoder->deadline);
+}
+static int stream_error(RiffStreamDecoder *decoder, int code, const char *stage, char *error, size_t capacity) {
+    if (!atomic_load(&decoder->cancelled) && av_gettime_relative() > atomic_load(&decoder->deadline)) code = AVERROR(ETIMEDOUT);
+    if (error && capacity) {
+        char detail[AV_ERROR_MAX_STRING_SIZE];
+        av_strerror(code, detail, sizeof(detail));
+        snprintf(error, capacity, "%s: %s", stage, detail);
+    }
+    return code;
+}
+RiffStreamDecoder *riff_decoder_create(void) {
+    RiffStreamDecoder *decoder = calloc(1, sizeof(*decoder));
+    if (decoder) { atomic_init(&decoder->cancelled, false); atomic_init(&decoder->deadline, INT64_MAX); }
+    return decoder;
+}
+void riff_decoder_cancel(RiffStreamDecoder *decoder) { if (decoder) atomic_store(&decoder->cancelled, true); }
+void riff_decoder_destroy(RiffStreamDecoder *decoder) {
+    if (!decoder) return;
+    if (decoder->fifo) av_audio_fifo_free(decoder->fifo);
+    swr_free(&decoder->swr);
+    av_packet_free(&decoder->packet);
+    av_frame_free(&decoder->frame);
+    avcodec_free_context(&decoder->codec);
+    avformat_close_input(&decoder->source);
+    av_free(decoder->headers);
+    free(decoder);
+}
+static int stream_io_open(AVFormatContext *format, AVIOContext **io, const char *url, int flags, AVDictionary **options) {
+    RiffStreamDecoder *decoder = format->opaque;
+    AVDictionary *local = NULL;
+    if (!options) options = &local;
+    av_dict_set(options, "tls_verify", "1", 0);
+    av_dict_set(options, "rw_timeout", "20000000", 0);
+    av_dict_set(options, "protocol_whitelist", "http,https,tcp,tls,crypto,data", 0);
+    char host[1024], scheme[32];
+    int port;
+    const char *target = !strncasecmp(url, "crypto+", 7) || !strncasecmp(url, "crypto:", 7) ? url + 7 : url;
+    av_url_split(scheme, sizeof(scheme), NULL, 0, host, sizeof(host), &port, NULL, 0, target);
+    if (port < 0) port = !strcasecmp(scheme, "https") ? 443 : 80;
+    bool same_origin = !strcasecmp(host, decoder->initial_host) && !strcasecmp(scheme, decoder->initial_scheme) && port == decoder->initial_port;
+    char *filtered = av_malloc(strlen(decoder->headers) + 1);
+    if (!filtered) return AVERROR(ENOMEM);
+    char *output = filtered;
+    const char *line = decoder->headers;
+    while (*line) {
+        const char *end = strstr(line, "\r\n");
+        size_t length = end ? (size_t)(end - line) : strlen(line);
+        const char *colon = memchr(line, ':', length);
+        size_t key = colon ? (size_t)(colon - line) : 0;
+        bool sensitive = (key == 6 && !strncasecmp(line, "Cookie", key)) ||
+                         (key == 7 && !strncasecmp(line, "Cookie2", key)) ||
+                         (key == 13 && !strncasecmp(line, "Authorization", key));
+        bool proxy_auth = key == 19 && !strncasecmp(line, "Proxy-Authorization", key);
+        if (!proxy_auth && (!sensitive || same_origin)) {
+            memcpy(output, line, length); output += length;
+            if (end) { *output++ = '\r'; *output++ = '\n'; }
+        }
+        if (!end) break;
+        line = end + 2;
+    }
+    *output = 0;
+    av_dict_set(options, "headers", filtered, 0);
+    av_free(filtered);
+    AVIOInterruptCB interrupt = { stream_interrupted, decoder };
+    int result = avio_open2(io, url, flags, &interrupt, options);
+    av_dict_free(&local);
+    return result;
+}
+int riff_decoder_open(RiffStreamDecoder *decoder, const char *url, const char *headers,
+                      double position, double *duration, char *error, size_t error_size) {
+    if (!decoder || !url || !isfinite(position) || position < 0 || decoder->source) return AVERROR(EINVAL);
+    if (strncasecmp(url, "http://", 7) && strncasecmp(url, "https://", 8)) return AVERROR(EINVAL);
+    pthread_once(&riff_network_once, riff_network_initialize);
+    atomic_store(&decoder->deadline, av_gettime_relative() + 20000000);
+    if (stream_interrupted(decoder)) return AVERROR_EXIT;
+    decoder->requested_position = position;
+    decoder->read_position = position;
+    decoder->source = avformat_alloc_context();
+    if (!decoder->source) return AVERROR(ENOMEM);
+    decoder->source->interrupt_callback = (AVIOInterruptCB){ stream_interrupted, decoder };
+    decoder->source->opaque = decoder;
+    decoder->source->io_open = stream_io_open;
+    decoder->headers = av_strdup(headers ? headers : "");
+    if (!decoder->headers) return AVERROR(ENOMEM);
+    av_url_split(decoder->initial_scheme, sizeof(decoder->initial_scheme), NULL, 0, decoder->initial_host, sizeof(decoder->initial_host), &decoder->initial_port, NULL, 0, url);
+    if (decoder->initial_port < 0) decoder->initial_port = !strcasecmp(decoder->initial_scheme, "https") ? 443 : 80;
+    AVDictionary *options = NULL;
+    av_dict_set(&options, "protocol_whitelist", "http,https,tcp,tls,crypto,data", 0);
+    av_dict_set(&options, "tls_verify", "1", 0);
+    av_dict_set(&options, "http_persistent", "0", 0);
+    av_dict_set(&options, "rw_timeout", "20000000", 0);
+    av_dict_set(&options, "user_agent", "Riff/0.7.5 (iOS)", 0);
+    if (headers && *headers) av_dict_set(&options, "headers", headers, 0);
+    int result = avformat_open_input(&decoder->source, url, NULL, &options);
+    av_dict_free(&options);
+    if (result < 0) return stream_error(decoder, result, "Open audio stream", error, error_size);
+    if ((result = avformat_find_stream_info(decoder->source, NULL)) < 0) return stream_error(decoder, result, "Read stream information", error, error_size);
+    result = av_find_best_stream(decoder->source, AVMEDIA_TYPE_AUDIO, -1, -1, NULL, 0);
+    if (result < 0) return stream_error(decoder, result, "Find stream audio", error, error_size);
+    decoder->stream_index = result;
+    AVStream *stream = decoder->source->streams[result];
+    decoder->origin = stream->start_time != AV_NOPTS_VALUE ? stream->start_time * av_q2d(stream->time_base) :
+                      (decoder->source->start_time != AV_NOPTS_VALUE ? decoder->source->start_time / (double)AV_TIME_BASE : 0);
+    const AVCodec *codec = avcodec_find_decoder(stream->codecpar->codec_id);
+    if (!codec) return stream_error(decoder, AVERROR_DECODER_NOT_FOUND, "Decode stream format", error, error_size);
+    decoder->codec = avcodec_alloc_context3(codec);
+    decoder->packet = av_packet_alloc();
+    decoder->frame = av_frame_alloc();
+    decoder->fifo = av_audio_fifo_alloc(AV_SAMPLE_FMT_FLTP, 2, 1);
+    if (!decoder->codec || !decoder->packet || !decoder->frame || !decoder->fifo) return AVERROR(ENOMEM);
+    if ((result = avcodec_parameters_to_context(decoder->codec, stream->codecpar)) < 0 ||
+        (result = avcodec_open2(decoder->codec, codec, NULL)) < 0) return stream_error(decoder, result, "Initialize stream decoder", error, error_size);
+    if (duration) *duration = decoder->source->duration > 0 ? decoder->source->duration / (double)AV_TIME_BASE : 0;
+    if (position > 0) {
+        double requested_timestamp = (position + decoder->origin) / av_q2d(stream->time_base);
+        if (!isfinite(requested_timestamp) || requested_timestamp >= INT64_MAX || requested_timestamp <= INT64_MIN) return AVERROR(EINVAL);
+        int64_t timestamp = (int64_t)requested_timestamp;
+        result = avformat_seek_file(decoder->source, decoder->stream_index, INT64_MIN, timestamp, timestamp, AVSEEK_FLAG_BACKWARD);
+        if (result < 0) return stream_error(decoder, result, "Seek audio stream", error, error_size);
+        avcodec_flush_buffers(decoder->codec);
+    }
+    return 0;
+}
+static int stream_converted(RiffStreamDecoder *decoder, AVFrame *input) {
+    int result;
+    if (!decoder->swr) {
+        if (!input) return 0;
+        AVChannelLayout stereo = AV_CHANNEL_LAYOUT_STEREO;
+        result = swr_alloc_set_opts2(&decoder->swr, &stereo, AV_SAMPLE_FMT_FLTP, 48000,
+                                    &input->ch_layout, input->format, input->sample_rate, 0, NULL);
+        if (result < 0 || (result = swr_init(decoder->swr)) < 0) return result;
+    }
+    if (!decoder->timeline_ready && input) {
+        AVStream *stream = decoder->source->streams[decoder->stream_index];
+        double first = input->best_effort_timestamp != AV_NOPTS_VALUE ? input->best_effort_timestamp * av_q2d(stream->time_base) - decoder->origin : decoder->requested_position;
+        decoder->skip_remaining = (int64_t)llround(fmax(0, decoder->requested_position - first) * 48000);
+        decoder->read_position = fmax(decoder->requested_position, first);
+        decoder->timeline_ready = true;
+    }
+    int capacity = swr_get_out_samples(decoder->swr, input ? input->nb_samples : 0);
+    if (capacity <= 0) return capacity;
+    uint8_t **audio = NULL;
+    result = av_samples_alloc_array_and_samples(&audio, NULL, 2, capacity, AV_SAMPLE_FMT_FLTP, 0);
+    if (result < 0) return result;
+    int count = swr_convert(decoder->swr, audio, capacity, input ? (const uint8_t **)input->extended_data : NULL, input ? input->nb_samples : 0);
+    if (count < 0) result = count;
+    else {
+        int skip = decoder->skip_remaining < count ? (int)decoder->skip_remaining : count;
+        decoder->skip_remaining -= skip;
+        count -= skip;
+        void *planes[] = { ((float *)audio[0]) + skip, ((float *)audio[1]) + skip };
+        result = av_audio_fifo_realloc(decoder->fifo, av_audio_fifo_size(decoder->fifo) + count);
+        if (result >= 0 && av_audio_fifo_write(decoder->fifo, planes, count) != count) result = AVERROR(EIO);
+    }
+    av_freep(&audio[0]);
+    av_freep(&audio);
+    return result;
+}
+int riff_decoder_read(RiffStreamDecoder *decoder, float *left, float *right, int capacity,
+                      double *position, char *error, size_t error_size) {
+    if (!decoder || !decoder->codec || !left || !right || capacity < 1 || capacity > 16384) return AVERROR(EINVAL);
+    atomic_store(&decoder->deadline, av_gettime_relative() + 20000000);
+    int result = 0;
+    while (!decoder->decoded_eof && av_audio_fifo_size(decoder->fifo) < capacity) {
+        if (stream_interrupted(decoder)) { result = AVERROR_EXIT; break; }
+        result = avcodec_receive_frame(decoder->codec, decoder->frame);
+        if (result >= 0) {
+            result = stream_converted(decoder, decoder->frame);
+            av_frame_unref(decoder->frame);
+            if (result < 0) break;
+            continue;
+        }
+        if (result == AVERROR_EOF) {
+            result = stream_converted(decoder, NULL);
+            decoder->decoded_eof = true;
+            break;
+        }
+        if (result != AVERROR(EAGAIN)) break;
+        if (decoder->demux_eof) {
+            if (decoder->drain_sent) { result = AVERROR_INVALIDDATA; break; }
+            decoder->drain_sent = true;
+            result = avcodec_send_packet(decoder->codec, NULL);
+            if (result < 0 && result != AVERROR_EOF) break;
+            continue;
+        }
+        do {
+            result = av_read_frame(decoder->source, decoder->packet);
+            if (result < 0 || decoder->packet->stream_index == decoder->stream_index) break;
+            av_packet_unref(decoder->packet);
+        } while (!stream_interrupted(decoder));
+        if (result == AVERROR_EOF) { decoder->demux_eof = true; result = 0; continue; }
+        if (result < 0) break;
+        result = avcodec_send_packet(decoder->codec, decoder->packet);
+        av_packet_unref(decoder->packet);
+        if (result < 0) break;
+    }
+    if (result < 0) return stream_error(decoder, result, "Read audio stream", error, error_size);
+    int count = av_audio_fifo_size(decoder->fifo);
+    if (count > capacity) count = capacity;
+    if (position) *position = decoder->read_position;
+    if (count) {
+        void *planes[] = { left, right };
+        if (av_audio_fifo_read(decoder->fifo, planes, count) != count) return AVERROR(EIO);
+        decoder->read_position += count / 48000.0;
+    }
+    return count;
+}
