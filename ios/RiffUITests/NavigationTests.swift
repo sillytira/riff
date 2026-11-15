@@ -16,9 +16,11 @@ final class NavigationTests: XCTestCase {
         app.terminate()
         app.launch()
         app.buttons["Settings"].tap()
-        XCTAssertEqual(app.buttons["appearance-mode"].value as? String, "Dark")
-        XCTAssertEqual(app.buttons["appearance-accent"].value as? String, "Teal")
+        let mode = app.buttons["appearance-mode"].value as? String
+        let accent = app.buttons["appearance-accent"].value as? String
         app.buttons["Reset appearance"].tap()
+        XCTAssertEqual(mode, "Dark")
+        XCTAssertEqual(accent, "Teal")
     }
 
     func testArtworkFromDownloadedMetadataIsVisibleInLibraryAndPlayer() {
@@ -163,8 +165,10 @@ final class NavigationTests: XCTestCase {
         XCTAssertTrue(edited.waitForExistence(timeout: 5))
         edited.press(forDuration: 1)
         app.buttons["Remove download"].tap()
-        app.buttons["Remove download"].tap()
-        XCTAssertFalse(edited.exists)
+        let confirmation = app.buttons["confirm-remove-download"]
+        XCTAssertTrue(confirmation.waitForExistence(timeout: 5))
+        confirmation.tap()
+        XCTAssertTrue(edited.waitForNonExistence(timeout: 5))
         app.terminate()
         app.launch()
         app.searchFields.firstMatch.tap()

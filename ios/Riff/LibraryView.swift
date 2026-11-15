@@ -80,7 +80,7 @@ struct LibraryView: View {
                     Button("Remove download", role: .destructive) {
                         do { try library.removeTracks([track.id], playlists: playlists) } catch { library.error = error.localizedDescription }
                         removingTrack = nil
-                    }
+                    }.accessibilityIdentifier("confirm-remove-download")
                 }
             } message: {
                 Text("Riff’s saved copy will be removed. Songs with a source link remain available online in your playlists and Favorites.")
