@@ -13,7 +13,8 @@ for RIFF_FORMAT in mp3 flac m4a opus; do
     m4a) RIFF_ENCODER=aac ;;
     opus) RIFF_ENCODER=libopus ;;
   esac
-  "$RIFF_FFMPEG" -v error -y -i ios/RiffTests/Fixtures/ui-tone.wav -c:a "$RIFF_ENCODER" "$RIFF_TEST_OUTPUT/tone.$RIFF_FORMAT"
+  rm -f "$RIFF_TEST_OUTPUT/tone.$RIFF_FORMAT"
+  "$PWD/native-codecs/build/macosx/convert-smoke" ios/RiffTests/Fixtures/ui-tone.wav "$RIFF_TEST_OUTPUT/tone.$RIFF_FORMAT" "$RIFF_FORMAT"
   "$RIFF_FFMPEG" -v error -y -i "$RIFF_TEST_OUTPUT/tone.$RIFF_FORMAT" -c:a pcm_s16le "$RIFF_TEST_OUTPUT/$RIFF_FORMAT.wav"
   "$RIFF_FFPROBE" -v error -show_entries format=duration -of default=noprint_wrappers=1 "$RIFF_TEST_OUTPUT/tone.$RIFF_FORMAT"
 done

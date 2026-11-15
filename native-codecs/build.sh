@@ -35,7 +35,7 @@ build_target() {
   flags="-arch $arch -isysroot $sysroot $minimum -O2 -fPIC"
   (
     cd "$work/lame"
-    CC="$compiler" CFLAGS="$flags" LDFLAGS="$flags" "$RIFF_CODEC_BUILD/sources/lame/configure" \
+    CC="$compiler" CFLAGS="$flags -std=gnu89" LDFLAGS="$flags" "$RIFF_CODEC_BUILD/sources/lame/configure" \
       --host=aarch64-apple-darwin --prefix="$prefix" --enable-static --disable-shared \
       --disable-frontend --disable-decoder --disable-dependency-tracking
     make -j3
@@ -73,12 +73,17 @@ build_target() {
     make -j3
     make install
   )
-  libtool -static -o "$work/libRiffCodecs.a" "$prefix/lib/libavformat.a" "$prefix/lib/libavcodec.a" \
+  "$compiler" $flags -std=c11 -I"$prefix/include" -I"$RIFF_CODEC_ROOT/bridge" -c "$RIFF_CODEC_ROOT/bridge/RiffCodecs.c" -o "$work/RiffCodecs.o"
+  cp "$RIFF_CODEC_ROOT/bridge/RiffCodecs.h" "$prefix/include/RiffCodecs.h"
+  libtool -static -o "$work/libRiffCodecs.a" "$work/RiffCodecs.o" "$prefix/lib/libavformat.a" "$prefix/lib/libavcodec.a" \
     "$prefix/lib/libswresample.a" "$prefix/lib/libavutil.a" "$prefix/lib/libmp3lame.a" "$prefix/lib/libopus.a"
 }
 
 if [ "${1:-all}" = host ]; then
   build_target macosx
+  xcrun clang -arch arm64 -mmacosx-version-min=14.0 -I"$RIFF_CODEC_ROOT/bridge" "$RIFF_CODEC_ROOT/bridge/smoke.c" \
+    "$RIFF_CODEC_BUILD/macosx/libRiffCodecs.a" -framework Security -framework CoreFoundation -framework AudioToolbox \
+    -lz -lbz2 -liconv -lm -o "$RIFF_CODEC_BUILD/macosx/convert-smoke"
   exit
 fi
 build_target iphoneos
