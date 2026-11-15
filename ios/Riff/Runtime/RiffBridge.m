@@ -101,6 +101,7 @@ NSString *RiffPythonRequest(NSString *bundlePath, NSString *request) {
 
 #include <zlib.h>
 #include <CommonCrypto/CommonKeyDerivation.h>
+#include <CommonCrypto/CommonCryptoError.h>
 
 NSData *RiffArchiveTransform(NSData *input, BOOL decompress) {
     const NSUInteger limit = 16 * 1024 * 1024;
