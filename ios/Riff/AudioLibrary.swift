@@ -43,6 +43,13 @@ final class AudioLibrary: NSObject {
     @ObservationIgnored private var generation = UUID()
     @ObservationIgnored private var manifestIsReadable = true
 
+    var lyricsKey: String? {
+        if let current {
+            if let source = current.webpageURL { return "source:" + source }
+            return "local:" + current.id.uuidString
+        }
+        return onlineCurrent.map { "source:" + $0.webpageURL }
+    }
     var playingTitle: String? { current?.name ?? onlineCurrent?.title }
     var playingArtist: String { current?.artist ?? onlineCurrent?.artist ?? "" }
     var elapsed: Double {
@@ -51,7 +58,9 @@ final class AudioLibrary: NSObject {
     }
     var duration: Double {
         let value = streamPlayer?.currentItem?.duration.seconds ?? player?.duration ?? 0
-        return value.isFinite ? max(0, value) : 0
+        if value.isFinite, value > 0 { return value }
+        let metadata = current?.duration ?? onlineCurrent?.duration ?? 0
+        return metadata.isFinite ? max(0, metadata) : 0
     }
 
     func seek(to value: Double) {
