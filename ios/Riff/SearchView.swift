@@ -36,7 +36,7 @@ struct SearchView: View {
                             .buttonStyle(.borderless).labelStyle(.iconOnly).frame(minWidth: 44, minHeight: 44)
                     }.listRowBackground(Color.clear)
                     .contextMenu {
-                        Button(library.listening.isFavorite(.online(track)) ? "Remove from Favorites" : "Add to Favorites", systemImage: "heart") { library.toggleFavorite(.online(track)) }
+                        Button(library.isFavorite(.online(track)) ? "Remove from Favorites" : "Add to Favorites", systemImage: "heart") { library.toggleFavorite(.online(track)) }
                     }
                 }
                 .overlay {

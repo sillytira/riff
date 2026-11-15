@@ -165,7 +165,7 @@ struct NowPlayingView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     if let source = library.playingSource {
-                        Button(library.listening.isFavorite(source) ? "Remove from Favorites" : "Add to Favorites", systemImage: library.listening.isFavorite(source) ? "heart.fill" : "heart") {
+                        Button(library.isFavorite(source) ? "Remove from Favorites" : "Add to Favorites", systemImage: library.isFavorite(source) ? "heart.fill" : "heart") {
                             library.toggleFavorite(source)
                         }
                     }

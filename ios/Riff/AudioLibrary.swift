@@ -66,8 +66,21 @@ final class AudioLibrary: NSObject {
         if let current { return .local(current.id) }
         return onlineCurrent.map { .online($0) }
     }
+    private func equivalentSources(for source: PlaylistSource) -> [PlaylistSource] {
+        switch source {
+        case .local(let id):
+            guard let online = tracks.first(where: { $0.id == id })?.onlineEquivalent else { return [] }
+            return [.online(online)] + equivalentSources(for: .online(online))
+        case .online(let online):
+            let key = downloadSourceKey(online.webpageURL)
+            return tracks.filter { $0.webpageURL.map(downloadSourceKey) == key }.map { .local($0.id) }
+        }
+    }
+    func isFavorite(_ source: PlaylistSource) -> Bool {
+        listening.isFavorite(source, equivalents: equivalentSources(for: source))
+    }
     func toggleFavorite(_ source: PlaylistSource) {
-        listening.toggleFavorite(source)
+        listening.toggleFavorite(source, equivalents: equivalentSources(for: source))
         if let failure = listening.error { error = failure }
     }
     var playingTitle: String? { current?.name ?? onlineCurrent?.title }
@@ -493,7 +506,7 @@ final class AudioLibrary: NSObject {
             try await streaming.prepare(url: url, headers: media.headers, position: position)
             guard generation == request else { streaming.stop(); return }
             isPlaying = true
-            listening.record(.online(onlineCurrent ?? track))
+            listening.record(.online(onlineCurrent ?? track), equivalents: equivalentSources(for: .online(track)))
             commands.update()
         } catch {
             if generation == request {
@@ -537,7 +550,7 @@ final class AudioLibrary: NSObject {
                 item.audioTimePitchAlgorithm = .spectral
                 streamPlayer?.playImmediately(atRate: effects.rate)
                 isPlaying = true
-                listening.record(.local(track.id))
+                listening.record(.local(track.id), equivalents: equivalentSources(for: .local(track.id)))
                 commands.update()
                 return
             }
@@ -555,7 +568,7 @@ final class AudioLibrary: NSObject {
             current = track
             isPlaying = next.play()
             if !isPlaying { throw PlaybackError.unavailable }
-            listening.record(.local(track.id))
+            listening.record(.local(track.id), equivalents: equivalentSources(for: .local(track.id)))
             commands.update()
         } catch { self.isPlaying = false; self.error = error.localizedDescription; commands.clear() }
     }

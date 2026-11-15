@@ -59,7 +59,7 @@ struct LibraryView: View {
                                 }
                             }
                             Button("Remove download", systemImage: "trash", role: .destructive) { removingTrack = track }
-                            Button(library.listening.isFavorite(.local(track.id)) ? "Remove from Favorites" : "Add to Favorites", systemImage: "heart") { library.toggleFavorite(.local(track.id)) }
+                            Button(library.isFavorite(.local(track.id)) ? "Remove from Favorites" : "Add to Favorites", systemImage: "heart") { library.toggleFavorite(.local(track.id)) }
                         }
                     }
                 }

@@ -9,7 +9,7 @@ struct ListeningEntry: Codable, Identifiable, Sendable {
     static func key(for source: PlaylistSource) -> String {
         switch source {
         case .local(let id): "local:" + id.uuidString
-        case .online(let track): "source:" + track.webpageURL
+        case .online(let track): "source:" + downloadSourceKey(track.webpageURL)
         }
     }
 }
@@ -36,20 +36,23 @@ final class ListeningStore {
         } catch { self.error = error.localizedDescription; writable = false }
     }
 
-    func isFavorite(_ source: PlaylistSource) -> Bool {
-        favorites.contains { $0.id == ListeningEntry.key(for: source) }
+    func isFavorite(_ source: PlaylistSource, equivalents: [PlaylistSource] = []) -> Bool {
+        let keys = Set(([source] + equivalents).map { ListeningEntry.key(for: $0) })
+        return favorites.contains { keys.contains(ListeningEntry.key(for: $0.source)) }
     }
-    func toggleFavorite(_ source: PlaylistSource) {
+    func toggleFavorite(_ source: PlaylistSource, equivalents: [PlaylistSource] = []) {
         let id = ListeningEntry.key(for: source)
         var updated = snapshot
-        if updated.favorites.contains(where: { $0.id == id }) { updated.favorites.removeAll { $0.id == id } }
+        let keys = Set(([source] + equivalents).map { ListeningEntry.key(for: $0) })
+        if updated.favorites.contains(where: { keys.contains(ListeningEntry.key(for: $0.source)) }) { updated.favorites.removeAll { keys.contains(ListeningEntry.key(for: $0.source)) } }
         else { updated.favorites.insert(ListeningEntry(id: id, source: source), at: 0) }
         commit(updated)
     }
-    func record(_ source: PlaylistSource, at date: Date = .now) {
+    func record(_ source: PlaylistSource, at date: Date = .now, equivalents: [PlaylistSource] = []) {
         let id = ListeningEntry.key(for: source)
         var updated = snapshot
-        updated.history.removeAll { $0.id == id }
+        let keys = Set(([source] + equivalents).map { ListeningEntry.key(for: $0) })
+        updated.history.removeAll { keys.contains(ListeningEntry.key(for: $0.source)) }
         updated.history.insert(ListeningEntry(id: id, source: source, playedAt: date), at: 0)
         updated.history = Array(updated.history.prefix(500))
         commit(updated)

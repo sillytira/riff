@@ -30,7 +30,7 @@ struct ListeningView: View {
                 }
             }
             .contextMenu {
-                Button(library.listening.isFavorite(entry.source) ? "Remove from Favorites" : "Add to Favorites", systemImage: "heart") {
+                Button(library.isFavorite(entry.source) ? "Remove from Favorites" : "Add to Favorites", systemImage: "heart") {
                     library.toggleFavorite(entry.source)
                 }
             }
