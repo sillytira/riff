@@ -42,10 +42,10 @@ final class AudioLibrary: NSObject {
             persistEffects()
         }
     }
-    var shuffleEnabled = false
-    var repeatMode: RepeatMode = .all
+    var shuffleEnabled = false { didSet { persistPlaybackPreferences() } }
+    var repeatMode: RepeatMode = .all { didSet { persistPlaybackPreferences() } }
     private(set) var playbackQueue = PlaybackQueue()
-    enum RepeatMode: String, CaseIterable { case off, all, one }
+    enum RepeatMode: String, CaseIterable, Codable { case off, all, one }
     @ObservationIgnored private lazy var lifecycle = PlaybackLifecycle(library: self)
     @ObservationIgnored private lazy var commands = PlaybackCommands(library: self)
     @ObservationIgnored private var streamPlayer: AVPlayer?
@@ -100,6 +100,12 @@ final class AudioLibrary: NSObject {
     @ObservationIgnored private var metadataWorker: Task<Void, Never>?
     @ObservationIgnored private let effectsFile: URL
     @ObservationIgnored private var effectsWritable = true
+    private struct PlaybackPreferences: Codable {
+        var shuffle: Bool
+        var repeatMode: RepeatMode
+    }
+    @ObservationIgnored private let preferencesFile: URL
+    @ObservationIgnored private var preferencesWritable = false
     @ObservationIgnored private let manifest: URL
 
     override convenience init() {
@@ -111,6 +117,7 @@ final class AudioLibrary: NSObject {
         directory = root
         manifest = root.appending(path: "library.json")
         effectsFile = root.appending(path: "effects.json")
+        preferencesFile = root.appending(path: "playback-preferences.json")
         super.init()
         do {
             try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -131,9 +138,25 @@ final class AudioLibrary: NSObject {
                 effects = saved
             }
         } catch { self.error = error.localizedDescription; effectsWritable = false }
+        do {
+            if FileManager.default.fileExists(atPath: preferencesFile.path) {
+                let saved = try JSONDecoder().decode(PlaybackPreferences.self, from: Data(contentsOf: preferencesFile))
+                shuffleEnabled = saved.shuffle
+                repeatMode = saved.repeatMode
+            }
+            preferencesWritable = true
+        } catch { self.error = "Playback preferences could not be read. Their data was preserved." }
         for track in tracks where track.metadataIndexed != true && track.assetRelativePath == nil {
             enqueueMetadata(id: track.id, url: root.appending(path: track.playbackFilename ?? track.filename))
         }
+    }
+
+    private func persistPlaybackPreferences() {
+        guard preferencesWritable else { return }
+        do {
+            let saved = PlaybackPreferences(shuffle: shuffleEnabled, repeatMode: repeatMode)
+            try JSONEncoder().encode(saved).write(to: preferencesFile, options: .atomic)
+        } catch { self.error = "Playback preferences could not be saved: " + error.localizedDescription }
     }
 
     private func enqueueMetadata(id: UUID, url: URL, forceTags: Bool = false) {

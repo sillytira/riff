@@ -97,4 +97,23 @@ final class AudioLibraryTests: XCTestCase {
         XCTAssertFalse(library.hasOfflineSource(alias.webpageURL))
     }
 
+    func testShuffleAndRepeatRestoreWithoutOverwritingCorruptPreferences() throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let library = AudioLibrary(root: root)
+        library.shuffleEnabled = true
+        library.repeatMode = .one
+        let restored = AudioLibrary(root: root)
+        XCTAssertTrue(restored.shuffleEnabled)
+        XCTAssertEqual(restored.repeatMode, .one)
+        let file = root.appending(path: "playback-preferences.json")
+        let corrupt = Data("unreadable preferences".utf8)
+        try corrupt.write(to: file)
+        let damaged = AudioLibrary(root: root)
+        XCTAssertNotNil(damaged.error)
+        damaged.repeatMode = .off
+        damaged.shuffleEnabled = true
+        XCTAssertEqual(try Data(contentsOf: file), corrupt)
+    }
+
 }
