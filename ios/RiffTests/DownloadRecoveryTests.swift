@@ -3,6 +3,27 @@ import XCTest
 
 @MainActor
 final class DownloadRecoveryTests: XCTestCase {
+    func testOSBackgroundSessionCompletesAndImportsAudio() async throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let library = AudioLibrary(root: root.appending(path: "library"))
+        let service = try BackgroundTransfers(root: root.appending(path: "downloads"), identifier: "io.github.rootscripts.riff.test." + UUID().uuidString)
+        defer { service.invalidate() }
+        let manager = DownloadManager(library: library, root: root.appending(path: "downloads"), transfers: service)
+        await manager.reconnect()
+        let base = try XCTUnwrap(ProcessInfo.processInfo.environment["RIFF_FIXTURE_SERVER"])
+        let url = try XCTUnwrap(URL(string: base + "/ui-session.m4a"))
+        let identity = TransferIdentity(job: UUID(), attempt: UUID())
+        _ = service.startDirect(URLRequest(url: url), identity: identity)
+        for _ in 0..<600 {
+            if manager.jobs.first?.state == .saved || manager.jobs.first?.state == .failed { break }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        XCTAssertEqual(manager.jobs.first?.state, .saved, manager.jobs.first?.status ?? "Background session did not complete")
+        XCTAssertEqual(library.tracks.count, 1)
+        XCTAssertEqual(library.tracks.first?.downloadJobID, identity.job)
+    }
+
     func testPausedJobRestoresAndCompletesWithoutDuplicateLibraryEntries() async throws {
         let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
