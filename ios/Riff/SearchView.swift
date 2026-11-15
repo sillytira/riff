@@ -92,7 +92,7 @@ struct TrackArtwork: View {
                 Image(uiImage: image).resizable().scaledToFill()
             } else {
                 ZStack {
-                    LinearGradient(colors: [.purple.opacity(0.7), .indigo], startPoint: .topLeading, endPoint: .bottomTrailing)
+                    LinearGradient(colors: [.accentColor.opacity(0.7), .indigo], startPoint: .topLeading, endPoint: .bottomTrailing)
                     Image(systemName: "music.note").font(.system(size: size * 0.3)).foregroundStyle(.white)
                 }
             }

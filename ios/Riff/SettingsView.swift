@@ -10,6 +10,7 @@ struct SettingsView: View {
     @State private var error: String?
     var body: some View {
         Form {
+            AppearanceSettings()
             Section {
                 LabeledContent("YouTube", value: signedIn ? "Sign-in saved" : (sessionStored ? "Sign-in expired" : "Not signed in"))
                 Button("Sign in to YouTube") { signingIn = true }

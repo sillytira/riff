@@ -25,11 +25,13 @@ final class RiffAppDelegate: NSObject, UIApplicationDelegate {
 struct RiffApp: App {
     @UIApplicationDelegateAdaptor(RiffAppDelegate.self) private var delegate
     @State private var model = RiffModel()
+    private var appearance = AppearancePreferences()
     @Environment(\.scenePhase) private var scenePhase
     var body: some Scene {
         WindowGroup {
             RootView(library: model.library, playlists: model.playlists, downloads: model.downloads)
-                .tint(.purple)
+                .tint(appearance.tint)
+                .preferredColorScheme(appearance.mode.colorScheme)
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .active { Task { await model.downloads.reconnect() } }
                 }

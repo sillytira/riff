@@ -137,7 +137,7 @@ struct NowPlayingView: View {
                         Button("Previous", systemImage: "backward.end.fill") { library.previous() }
                         Button("Next", systemImage: "forward.end.fill") { library.next() }
                         Button("Shuffle", systemImage: "shuffle") { library.shuffleEnabled.toggle() }
-                            .tint(library.shuffleEnabled ? Color.purple : Color.gray)
+                            .tint(library.shuffleEnabled ? Color.accentColor : Color.gray)
                         Menu {
                             ForEach(AudioLibrary.RepeatMode.allCases, id: \.self) { mode in
                                 Button(mode.rawValue.capitalized) { library.repeatMode = mode }

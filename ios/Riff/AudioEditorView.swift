@@ -49,7 +49,7 @@ struct AudioEditorView: View {
                     Section {
                         Text(track.name).font(.headline)
                         Canvas { context, size in
-                            context.fill(Path(CGRect(x: size.width * start / duration, y: 0, width: size.width * (end - start) / duration, height: size.height)), with: .color(.purple.opacity(0.12)))
+                            context.fill(Path(CGRect(x: size.width * start / duration, y: 0, width: size.width * (end - start) / duration, height: size.height)), with: .color(.accentColor.opacity(0.12)))
                             guard !peaks.isEmpty else { return }
                             var path = Path()
                             for (index, peak) in peaks.enumerated() {
@@ -58,7 +58,7 @@ struct AudioEditorView: View {
                                 path.move(to: CGPoint(x: x, y: size.height / 2 - height))
                                 path.addLine(to: CGPoint(x: x, y: size.height / 2 + height))
                             }
-                            context.stroke(path, with: .color(.purple), lineWidth: 1)
+                            context.stroke(path, with: .color(.accentColor), lineWidth: 1)
                         }.frame(height: 120).accessibilityLabel("Waveform of \(track.name)")
                     }
                     Section("Selection") {
