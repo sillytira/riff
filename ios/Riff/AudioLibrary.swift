@@ -71,6 +71,7 @@ final class AudioLibrary: NSObject {
         case .local(let id):
             guard let online = tracks.first(where: { $0.id == id })?.onlineEquivalent else { return [] }
             return [.online(online)] + equivalentSources(for: .online(online))
+        case .file: return []
         case .online(let online):
             let key = downloadSourceKey(online.webpageURL)
             return tracks.filter { $0.webpageURL.map(downloadSourceKey) == key }.map { .local($0.id) }
@@ -656,7 +657,19 @@ final class AudioLibrary: NSObject {
         switch source {
         case .local(let id): tracks.first(where: { $0.id == id })?.name ?? "Unavailable local track"
         case .online(let track): track.title
+        case .file(let reference): reference.title
         }
+    }
+
+    func matchingLocalFile(_ reference: LocalFileReference) -> LocalTrack? {
+        let named = tracks.filter { $0.filename == reference.filename && !reference.filename.isEmpty }
+        if named.count == 1 { return named[0] }
+        let candidates = tracks.filter { track in
+            track.name.localizedStandardCompare(reference.title) == .orderedSame &&
+            (track.artist ?? "").localizedStandardCompare(reference.artist) == .orderedSame &&
+            (reference.duration == nil || track.duration.map { abs($0 - reference.duration!) < 3 } == true)
+        }
+        return candidates.count == 1 ? candidates[0] : nil
     }
 
     private func playEntry(_ entry: PlaylistEntry) {
@@ -666,6 +679,12 @@ final class AudioLibrary: NSObject {
             play(track, preserveQueue: true)
         case .online(let track):
             Task { await playOnline(track, preserveQueue: true) }
+        case .file(let reference):
+            guard let track = matchingLocalFile(reference) else {
+                error = "Import “" + reference.title + "” from Files to play this playlist entry. Local audio is not included in a playlist JSON file."
+                return
+            }
+            play(track, preserveQueue: true)
         }
     }
 

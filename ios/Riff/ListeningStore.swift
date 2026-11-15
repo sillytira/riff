@@ -10,6 +10,7 @@ struct ListeningEntry: Codable, Identifiable, Sendable {
         switch source {
         case .local(let id): "local:" + id.uuidString
         case .online(let track): "source:" + downloadSourceKey(track.webpageURL)
+        case .file(let reference): reference.key
         }
     }
 }

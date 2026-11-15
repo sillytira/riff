@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct PlaylistsView: View {
     @Bindable var store: PlaylistStore
@@ -8,6 +9,9 @@ struct PlaylistsView: View {
     @State private var importURL = ""
     @State private var importing = false
     @State private var busy = false
+    @State private var importingFile = false
+    @State private var exportingFile = false
+    @State private var exportDocument = PlaylistFileDocument(data: Data())
     var body: some View {
         NavigationStack {
             List {
@@ -34,8 +38,28 @@ struct PlaylistsView: View {
                     Menu {
                         Button("New playlist", systemImage: "plus") { newName = ""; creating = true }
                         Button("Import public link", systemImage: "link") { importURL = ""; importing = true }
+                        Button("Import playlist JSON", systemImage: "doc.badge.plus") { importingFile = true }
+                        Button("Export all playlists", systemImage: "square.and.arrow.up") {
+                            do {
+                                exportDocument = PlaylistFileDocument(data: try PortablePlaylists.write(store.playlists, library: library))
+                                exportingFile = true
+                            } catch { store.error = error.localizedDescription }
+                        }.disabled(store.playlists.isEmpty)
                     } label: { Label("Add playlist", systemImage: "plus") }
                 }
+            }
+            .fileImporter(isPresented: $importingFile, allowedContentTypes: [.json]) { result in
+                do {
+                    let url = try result.get()
+                    let access = url.startAccessingSecurityScopedResource()
+                    defer { if access { url.stopAccessingSecurityScopedResource() } }
+                    let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+                    guard size <= PortablePlaylists.maximumBytes else { throw ExtractionError(message: "The playlist file is larger than 8 MB.") }
+                    _ = try store.importFile(Data(contentsOf: url, options: .mappedIfSafe))
+                } catch { store.error = error.localizedDescription }
+            }
+            .fileExporter(isPresented: $exportingFile, document: exportDocument, contentType: .json, defaultFilename: "riff-playlists") { result in
+                if case .failure(let error) = result { store.error = error.localizedDescription }
             }
             .alert("New playlist", isPresented: $creating) {
                 TextField("Name", text: $newName)
@@ -73,6 +97,8 @@ struct PlaylistDetailView: View {
     @State private var adding = false
     @State private var renaming = false
     @State private var name = ""
+    @State private var exporting = false
+    @State private var exportDocument = PlaylistFileDocument(data: Data())
     private var playlist: SavedPlaylist? { store.playlists.first { $0.id == id } }
     var body: some View {
         List {
@@ -100,10 +126,20 @@ struct PlaylistDetailView: View {
                 Menu {
                     Button("Add tracks", systemImage: "plus") { adding = true }
                     Button("Rename", systemImage: "pencil") { name = playlist?.name ?? ""; renaming = true }
+                    Button("Export as JSON", systemImage: "square.and.arrow.up") {
+                        guard let playlist else { return }
+                        do {
+                            exportDocument = PlaylistFileDocument(data: try PortablePlaylists.write([playlist], library: library))
+                            exporting = true
+                        } catch { store.error = error.localizedDescription }
+                    }
                 } label: { Label("Playlist actions", systemImage: "ellipsis") }
             }
         }
         .sheet(isPresented: $adding) { AddPlaylistTracksView(id: id, store: store, library: library) }
+        .fileExporter(isPresented: $exporting, document: exportDocument, contentType: .json, defaultFilename: "riff-playlist") { result in
+            if case .failure(let error) = result { store.error = error.localizedDescription }
+        }
         .alert("Rename playlist", isPresented: $renaming) {
             TextField("Name", text: $name)
             Button("Save") { store.rename(id, to: name) }

@@ -55,12 +55,14 @@ struct ListeningView: View {
         switch source {
         case .local(let id): library.tracks.first { $0.id == id }?.artworkURL
         case .online(let track): track.artworkURL
+        case .file(let reference): library.matchingLocalFile(reference)?.artworkURL
         }
     }
     private func artist(_ source: PlaylistSource) -> String {
         switch source {
         case .local(let id): library.tracks.first { $0.id == id }?.artist ?? ""
         case .online(let track): track.artist
+        case .file(let reference): reference.artist
         }
     }
 }

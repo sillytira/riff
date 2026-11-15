@@ -4,6 +4,7 @@ import Observation
 enum PlaylistSource: Codable, Sendable {
     case local(UUID)
     case online(OnlineTrack)
+    case file(LocalFileReference)
 }
 
 struct PlaylistEntry: Codable, Identifiable, Sendable {
@@ -16,6 +17,8 @@ struct SavedPlaylist: Codable, Identifiable, Sendable {
     let id: UUID
     var name: String
     var entries: [PlaylistEntry]
+    var description: String? = nil
+    var cover: String? = nil
 }
 
 struct PlaybackQueue {
@@ -79,6 +82,13 @@ final class PlaylistStore {
         let playlist = SavedPlaylist(id: UUID(), name: title, entries: entries)
         guard commit(playlists + [playlist]) else { return nil }
         return playlist.id
+    }
+
+    @discardableResult
+    func importFile(_ data: Data) throws -> Int {
+        let imported = try PortablePlaylists.read(data)
+        guard commit(playlists + imported) else { throw ExtractionError(message: error ?? "The playlists could not be saved.") }
+        return imported.count
     }
 
     func rename(_ id: UUID, to name: String) {
