@@ -98,3 +98,33 @@ NSString *RiffPythonRequest(NSString *bundlePath, NSString *request) {
         return response;
     }
 }
+
+#include <zlib.h>
+#include <CommonCrypto/CommonKeyDerivation.h>
+
+NSData *RiffArchiveTransform(NSData *input, BOOL decompress) {
+    const NSUInteger limit = 16 * 1024 * 1024;
+    if (input.length > (decompress ? limit + 1024 * 1024 : limit)) return nil;
+    NSUInteger capacity = decompress ? limit : compressBound((uLong)input.length) + 64;
+    NSMutableData *output = [NSMutableData dataWithLength:capacity];
+    z_stream stream = {0};
+    stream.next_in = (Bytef *)input.bytes;
+    stream.avail_in = (uInt)input.length;
+    stream.next_out = output.mutableBytes;
+    stream.avail_out = (uInt)capacity;
+    int result = decompress ? inflateInit2(&stream, -MAX_WBITS) : deflateInit2(&stream, Z_DEFAULT_COMPRESSION, Z_DEFLATED, -MAX_WBITS, 8, Z_DEFAULT_STRATEGY);
+    if (result != Z_OK) return nil;
+    result = decompress ? inflate(&stream, Z_FINISH) : deflate(&stream, Z_FINISH);
+    BOOL valid = result == Z_STREAM_END && stream.total_in == input.length;
+    NSUInteger count = stream.total_out;
+    if (decompress) inflateEnd(&stream); else deflateEnd(&stream);
+    return valid ? [NSData dataWithBytes:output.bytes length:count] : nil;
+}
+
+NSData *RiffBackupKey(NSData *password, NSData *salt, uint32_t rounds) {
+    if (!rounds || salt.length < 1 || password.length > 1024 * 1024 || salt.length > 1024) return nil;
+    NSMutableData *key = [NSMutableData dataWithLength:32];
+    int result = CCKeyDerivationPBKDF(kCCPBKDF2, password.bytes, password.length,
+                                     salt.bytes, salt.length, kCCPRFHmacAlgSHA256, rounds, key.mutableBytes, key.length);
+    return result == kCCSuccess ? key : nil;
+}
