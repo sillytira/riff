@@ -47,7 +47,7 @@ final class NativeStreamingPlayer {
     }
 
     init(duration: Double?, settings: AudioEffectSettings) throws {
-        guard let format = AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 2) else { throw PlaybackError.unavailable }
+        guard let format = AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 2) else { throw ExtractionError(message: "The audio output is unavailable.") }
         self.format = format
         graph = AudioGraph(format: format, settings: settings)
         self.settings = settings
@@ -107,7 +107,7 @@ final class NativeStreamingPlayer {
         heldTime = sourceStart
         lastScheduledEnd = nil
         setBuffering(playing)
-        guard let sourceURL else { fail(PlaybackError.unavailable, id: id); return }
+        guard let sourceURL else { fail(ExtractionError(message: "The audio output is unavailable."), id: id); return }
         do {
             let session = try Session()
             self.session = session
