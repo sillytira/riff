@@ -66,6 +66,32 @@ final class NavigationTests: XCTestCase {
         attach(app, name: "Downloads")
     }
 
+    func testPausedDownloadSurvivesRelaunchAndResumesIntoLibrary() {
+        let app = XCUIApplication()
+        app.launch()
+        app.tabBars.buttons["Discover"].tap()
+        let search = app.searchFields.firstMatch
+        search.tap()
+        search.typeText("http://127.0.0.1:8765/slow/ui-session.m4a?recovery=" + UUID().uuidString + "\n")
+        XCTAssertTrue(app.staticTexts["ui-session"].firstMatch.waitForExistence(timeout: 30))
+        app.buttons["Download"].firstMatch.tap()
+        app.tabBars.buttons["Downloads"].tap()
+        let row = app.cells.containing(.staticText, identifier: "ui-session").firstMatch
+        let pause = row.buttons["Pause download"]
+        XCTAssertTrue(pause.waitForExistence(timeout: 10))
+        pause.tap()
+        XCTAssertTrue(row.staticTexts["Paused"].waitForExistence(timeout: 5))
+        attach(app, name: "Paused download with progress")
+        app.terminate()
+        app.launch()
+        app.tabBars.buttons["Downloads"].tap()
+        XCTAssertTrue(row.staticTexts["Paused"].waitForExistence(timeout: 5))
+        row.buttons["Resume download"].tap()
+        XCTAssertTrue(row.staticTexts["Saved offline"].waitForExistence(timeout: 30))
+        app.tabBars.buttons["Library"].tap()
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "local-track-", "ui-session")).firstMatch.waitForExistence(timeout: 10))
+    }
+
     func testPlaylistCreationRenameAndRelaunchPersistence() {
         let app = XCUIApplication()
         app.launch()
