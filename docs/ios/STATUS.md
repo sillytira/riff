@@ -44,14 +44,15 @@ Draft PR: https://github.com/sillytira/riff/pull/1
 
 ## Evidence obtained
 
-Latest fully passing native app build: https://github.com/sillytira/riff/actions/runs/43674535148
-Unsigned IPA: https://github.com/sillytira/riff/actions/runs/43674535148/artifacts/14146213433
-This run passed all 38 native tests, all six UI tests, device compilation and IPA
-packaging. It is the same app source commit now on `ios/liquid-glass` (de2d89b). It validates covers in Library/Now Playing, lock-screen artwork data,
-Favorites after relaunch, lyric recording matching/offset persistence, native DSP,
-queue/playlist/effect storage and search -> streaming -> download -> offline local
-playback -> waveform editor -> saved edit -> relaunch. Latest cover screenshots
-were downloaded and visually inspected (iPhone 17 Pro simulator, iOS 26.2).
+Latest fully passing native app build: https://github.com/sillytira/riff/actions/runs/43680430624
+The same streaming app source passed run 43678983113 with all 42 native tests,
+all six UI tests, device compilation and IPA packaging.
+Unsigned IPA: https://github.com/sillytira/riff/actions/runs/43678983113/artifacts/14147663272
+Source is merged into `ios/liquid-glass` (4ff2cd0). Validation covers Library/Now
+Playing artwork, lock-screen artwork data, Favorites after relaunch, lyric matching,
+native DSP, streaming PCM/seek, TLS rejection, credential scoping, offline playback,
+waveform export, metadata editing and safe deletion. Cover screenshots were
+visually inspected on the iPhone 17 Pro simulator, iOS 26.2.
 
 The user sideloaded older run 43621684813 and confirmed music playback but missing
 covers. Their screenshots show a mashup with a placeholder and no matching lyrics.
@@ -72,13 +73,20 @@ relaunch playback, cancellation and bundled licenses. Library metadata edits
 survive asynchronous indexing and can reload file tags. Removal validates owned
 paths, stops active playback and retains online equivalents in playlists/Favorites.
 
-**Streaming DSP in progress:** branch `ios/streaming-dsp` adds a cancellable native
-FFmpeg HTTP/HLS decoder, bounded PCM buffering and the existing effects graph for
-remote playback. Run 43678305700 compiled the codec libraries but failed a Swift
-error-state assignment; commit 23f2c1b fixes it. The next run is pending. New tests
-cover PCM/seek/playback, invalid TLS certificates (including HLS children), and
-credential scoping across playlist children/redirects. This is not yet merged.
-Offline system-managed HLS packages still use AVPlayer and support speed only.
+**Streaming DSP validated:** a cancellable in-process FFmpeg HTTP/HLS decoder
+feeds bounded PCM buffers into the existing effects graph. Run 43678983113 passed
+all tests and device packaging. Coverage includes PCM/seek/playback, invalid TLS
+certificates on top-level and child HLS requests, and credential scoping across
+playlist children and redirects. These changes are merged. Offline system-managed
+HLS packages still use AVPlayer and support speed only.
+
+**Download recovery under validation:** branch `ios/download-recovery` adds
+protected persistent journals, OS background transfers, progress, pause/resume,
+relaunch receipts, and import identities preventing duplicate library entries after
+termination. The first run exposed a Swift error-reporting compile issue, fixed in
+b9058b5; run 43691682843 is validating it. Offline-first selection and a queue
+preservation test have been added locally and are not yet validated. Do not claim
+background recovery works on a physical device until tested there.
 
 **Live providers:** macOS run https://github.com/sillytira/riff/actions/runs/43622202851
 failed overall because YouTube search returned 15 results but resolving three
@@ -117,9 +125,9 @@ send private cookies or passwords through chat; implement local account handling
 1. Validate current CI and inspect playback/editor screenshots; fix failures.
 2. Validate native YouTube sign-in/cookie handling. Real YouTube/JSC and physical-device HLS verification remain
    required; hosted runners encountered a YouTube sign-in challenge.
-3. Finish missing input decoders such as OGG and full streaming DSP (branch in
-   progress). Export formats are integrated. Current full DSP applies to direct
-   local files; streaming and system-managed HLS currently support playback speed.
+3. Finish missing input decoders such as OGG and full offline HLS DSP. Export
+   formats and online streaming DSP are integrated. Full DSP applies to direct
+   local files and HTTP/HLS streams; system-managed offline HLS supports speed.
    Prefer a current in-process codec build; do not introduce a companion server.
 4. Finish Spotify/Apple/Deezer/etc. playlist migration and account library flows.
    Current public import delegates to yt-dlp, which does not cover every original
@@ -158,5 +166,5 @@ Opus for Apple Silicon host, iPhone and simulator. It includes a cancellation-aw
 C conversion API, MP3/FLAC/M4A/Opus conversion checks, metadata retention checks and
 FLAC sample equality checks. Run 43671363635 passed host conversion, metadata, lossless-sample equality,
 existing-file preservation and cancellation checks, then built the iPhone and
-simulator libraries. The dependency and app export integration are validated and merged. Streaming DSP is on a separate branch as described above. Do not mark the format
-conversion or streaming DSP gates complete.
+simulator libraries. The dependency and app export integration are validated and merged. Online streaming DSP is also validated and merged as described above. General
+input decoding and full offline HLS DSP remain separate open gates.

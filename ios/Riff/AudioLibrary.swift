@@ -334,14 +334,17 @@ final class AudioLibrary: NSObject {
         }
     }
 
-    func hasOfflineSource(_ source: String) -> Bool {
-        guard !source.isEmpty else { return false }
-        return tracks.contains { track in
-            guard let url = track.webpageURL, downloadSourceKey(url) == downloadSourceKey(source) else { return false }
-            if let relative = track.assetRelativePath { return FileManager.default.fileExists(atPath: URL(filePath: NSHomeDirectory()).appending(path: relative).path) }
-            return FileManager.default.fileExists(atPath: directory.appending(path: track.filename).path)
+    func offlineTrack(for source: String) -> LocalTrack? {
+        guard !source.isEmpty else { return nil }
+        let key = downloadSourceKey(source)
+        return tracks.first { track in
+            guard let url = track.webpageURL, downloadSourceKey(url) == key,
+                  let files = try? ownedFiles(for: track), !files.isEmpty else { return false }
+            return files.allSatisfy { FileManager.default.fileExists(atPath: $0.path) }
         }
     }
+
+    func hasOfflineSource(_ source: String) -> Bool { offlineTrack(for: source) != nil }
 
     func originalURL(for track: LocalTrack) -> URL? {
         guard track.assetRelativePath == nil else { return nil }
@@ -415,6 +418,11 @@ final class AudioLibrary: NSObject {
                 if case .online(let item) = $0.source { return item.webpageURL == track.webpageURL }
                 return false
             })?.id)
+        }
+        if let saved = offlineTrack(for: track.webpageURL) {
+            play(saved, preserveQueue: true)
+            if position > 0 { seek(to: position) }
+            return
         }
         let request = UUID()
         generation = request
