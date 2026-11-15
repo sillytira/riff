@@ -30,6 +30,17 @@ final class StreamingTests: XCTestCase {
         }
     }
 
+    func testAACEncoderDelayDoesNotAbortInitialPlayback() async throws {
+        let handle = try StreamDecoderHandle()
+        defer { handle.cancel() }
+        let decoder = StreamDecoder(handle: handle)
+        _ = try await decoder.open(url: try base().appending(path: "aac-priming.m4a"), headers: [:], position: 0)
+        let decoded = try await decoder.read()
+        let chunk = try XCTUnwrap(decoded)
+        XCTAssertEqual(chunk.position, 0, accuracy: 0.03)
+        XCTAssertGreaterThan(chunk.left.reduce(0) { $0 + Double($1 * $1) } / Double(chunk.count), 0.0001)
+    }
+
     func testTLSVerificationRejectsUntrustedRootAndHLSChild() async throws {
         let urls = [URL(string: "https://127.0.0.1:8766/ui-tone.wav")!, try base().appending(path: "hls/untrusted-child.m3u8")]
         for url in urls {

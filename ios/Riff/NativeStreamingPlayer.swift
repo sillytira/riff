@@ -41,7 +41,7 @@ final class NativeStreamingPlayer {
     var elapsed: Double {
         let value: Double
         if graph.player.isPlaying, let render = graph.player.lastRenderTime, let time = graph.player.playerTime(forNodeTime: render) {
-            value = sourceStart + Double(time.sampleTime) / 48000
+            value = sourceStart + max(0, Double(time.sampleTime)) / 48000
         } else { value = heldTime }
         return min(duration > 0 ? duration : .greatestFiniteMagnitude, max(0, value.isFinite ? value : 0))
     }
