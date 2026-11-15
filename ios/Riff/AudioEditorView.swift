@@ -23,6 +23,13 @@ actor WaveformReader {
 
 struct AudioEditorView: View {
     let library: AudioLibrary
+    // Editing owns a selection even when the playback queue advances.
+    @State private var selectedTrack: LocalTrack?
+
+    init(library: AudioLibrary) {
+        self.library = library
+        _selectedTrack = State(initialValue: library.current)
+    }
     @State private var start = 0.0
     @State private var end = 1.0
     @State private var duration = 1.0
@@ -34,7 +41,7 @@ struct AudioEditorView: View {
 
     var body: some View {
         Group {
-            if let track = library.current, let url = library.editableURL(for: track) {
+            if let track = selectedTrack, let url = library.editableURL(for: track) {
                 Form {
                     Section {
                         Text(track.name).font(.headline)
@@ -56,7 +63,11 @@ struct AudioEditorView: View {
                         Slider(value: Binding(get: { start }, set: { start = min($0, end - min(0.01, duration)) }), in: 0...duration).accessibilityLabel("Selection start")
                         Text("End: \(end, specifier: "%.2f") seconds").monospacedDigit()
                         Slider(value: Binding(get: { end }, set: { end = max($0, start + min(0.01, duration)) }), in: 0...duration).accessibilityLabel("Selection end")
-                        Button("Preview selection start", systemImage: "play") { library.seek(to: start); if !library.isPlaying { library.togglePlayback() } }
+                        Button("Preview selection start", systemImage: "play") {
+                            if library.current?.id != track.id { library.play(track) }
+                            library.seek(to: start)
+                            if !library.isPlaying { library.togglePlayback() }
+                        }
                     }
                     Section {
                         Toggle("Apply current audio effects", isOn: $includeEffects)
