@@ -229,7 +229,8 @@ final class DownloadManager {
             } catch {
                 if let index = self.index(job.id) {
                     self.jobs[index].state = .failed
-                    self.jobs[index].message = error.localizedDescription
+                    let failure = error as NSError
+                    self.jobs[index].message = "Could not import downloaded audio: " + failure.localizedDescription + " (" + failure.domain + " " + String(failure.code) + ")"
                     _ = self.save()
                 }
             }
