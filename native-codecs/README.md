@@ -10,7 +10,7 @@ Pinned sources, verified by SHA-256 in `build.sh`:
 
 - FFmpeg n8.0.1: https://github.com/FFmpeg/FFmpeg/tree/n8.0.1
 - LAME 3.100: https://github.com/lameproject/lame/tree/1f5cc9487284d5950343aa5d4f70de433468070a
-- Opus 1.5.2: https://github.com/xiph/opus/tree/v1.5.2
+- Opus 1.5.2: https://downloads.xiph.org/releases/opus/opus-1.5.2.tar.gz
 
 Run `native-codecs/build.sh host` and `native-codecs/smoke.sh` on an Apple Silicon
 Mac to test real conversions. `native-codecs/build.sh` creates an arm64 device and

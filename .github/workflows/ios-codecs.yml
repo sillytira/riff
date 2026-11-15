@@ -20,13 +20,15 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: native-codecs/build/sources
-          key: riff-codec-sources-ffmpeg801-lame1f5cc948-opus152
+          key: riff-codec-sources-ffmpeg801-lame1f5cc948-opus152-release
       - name: Compile and test host audio codecs
         run: |
-          native-codecs/build.sh host > native-codec-host.log 2>&1
+          set -o pipefail
+          if ! native-codecs/build.sh host > native-codec-host.log 2>&1; then tail -80 native-codec-host.log; exit 1; fi
           native-codecs/smoke.sh 2>&1 | tee native-codec-smoke.log
       - name: Compile iPhone and simulator libraries
-        run: native-codecs/build.sh > native-codec-ios.log 2>&1
+        run: |
+          if ! native-codecs/build.sh > native-codec-ios.log 2>&1; then tail -80 native-codec-ios.log; exit 1; fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
