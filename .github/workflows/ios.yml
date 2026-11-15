@@ -45,7 +45,7 @@ jobs:
         working-directory: ios
         run: |
           xcodegen generate
-          xcodebuild -project Riff.xcodeproj -scheme Riff -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' ARCHS="$(uname -m)" CODE_SIGNING_ALLOWED=NO build
+          xcodebuild -project Riff.xcodeproj -scheme Riff -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' ARCHS="$(uname -m)" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- build
       - name: Boot iPhone simulator
         timeout-minutes: 10
         run: |
@@ -64,7 +64,7 @@ jobs:
           python3 scripts/fixture-server.py --port 8766 --directory RiffTests/Fixtures --tls-cert build/test-server-cert.pem --tls-key build/test-server-key.pem > build/fixture-tls-server.log 2>&1 &
           RIFF_TLS_FIXTURE_PID=$!
           trap 'kill "$RIFF_FIXTURE_PID" "$RIFF_TLS_FIXTURE_PID"' EXIT
-          xcodebuild -project Riff.xcodeproj -scheme Riff -destination "platform=iOS Simulator,id=$RIFF_DEVICE_ID" -parallel-testing-enabled NO -only-testing:RiffTests -test-timeouts-enabled YES -default-test-execution-time-allowance 120 -maximum-test-execution-time-allowance 180 ARCHS="$(uname -m)" CODE_SIGNING_ALLOWED=NO -resultBundlePath build/NativeTests.xcresult test 2>&1 | tee build/native-tests.log
+          xcodebuild -project Riff.xcodeproj -scheme Riff -destination "platform=iOS Simulator,id=$RIFF_DEVICE_ID" -parallel-testing-enabled NO -only-testing:RiffTests -test-timeouts-enabled YES -default-test-execution-time-allowance 120 -maximum-test-execution-time-allowance 180 ARCHS="$(uname -m)" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- -resultBundlePath build/NativeTests.xcresult test 2>&1 | tee build/native-tests.log
       - name: Test native interface on iPhone
         timeout-minutes: 10
         working-directory: ios
@@ -73,7 +73,7 @@ jobs:
           python3 scripts/fixture-server.py --port 8765 --directory RiffTests/Fixtures > build/ui-fixture-server.log 2>&1 &
           RIFF_UI_FIXTURE_PID=$!
           trap 'kill "$RIFF_UI_FIXTURE_PID"' EXIT
-          xcodebuild -project Riff.xcodeproj -scheme Riff -destination "platform=iOS Simulator,id=$RIFF_DEVICE_ID" -parallel-testing-enabled NO -only-testing:RiffUITests -test-timeouts-enabled YES -default-test-execution-time-allowance 120 -maximum-test-execution-time-allowance 180 ARCHS="$(uname -m)" CODE_SIGNING_ALLOWED=NO -resultBundlePath build/UITests.xcresult test 2>&1 | tee build/ui-tests.log
+          xcodebuild -project Riff.xcodeproj -scheme Riff -destination "platform=iOS Simulator,id=$RIFF_DEVICE_ID" -parallel-testing-enabled NO -only-testing:RiffUITests -test-timeouts-enabled YES -default-test-execution-time-allowance 120 -maximum-test-execution-time-allowance 180 ARCHS="$(uname -m)" CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- -resultBundlePath build/UITests.xcresult test 2>&1 | tee build/ui-tests.log
       - name: Export background transfer diagnostics
         if: always() && env.RIFF_DEVICE_ID != ''
         run: |
