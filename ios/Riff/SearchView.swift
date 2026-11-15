@@ -35,6 +35,9 @@ struct SearchView: View {
                         Button("Download", systemImage: "arrow.down.circle") { downloads.download(track, into: library) }
                             .buttonStyle(.borderless).labelStyle(.iconOnly).frame(minWidth: 44, minHeight: 44)
                     }.listRowBackground(Color.clear)
+                    .contextMenu {
+                        Button(library.listening.isFavorite(.online(track)) ? "Remove from Favorites" : "Add to Favorites", systemImage: "heart") { library.toggleFavorite(.online(track)) }
+                    }
                 }
                 .overlay {
                     if loading { ProgressView("Searching…") }

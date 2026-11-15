@@ -19,6 +19,7 @@ struct LocalTrack: Codable, Identifiable {
 @MainActor @Observable
 final class AudioLibrary: NSObject {
     private(set) var tracks: [LocalTrack] = []
+    let listening: ListeningStore
     private(set) var current: LocalTrack?
     private(set) var isPlaying = false
     var error: String?
@@ -50,6 +51,14 @@ final class AudioLibrary: NSObject {
             return "local:" + current.id.uuidString
         }
         return onlineCurrent.map { "source:" + $0.webpageURL }
+    }
+    var playingSource: PlaylistSource? {
+        if let current { return .local(current.id) }
+        return onlineCurrent.map { .online($0) }
+    }
+    func toggleFavorite(_ source: PlaylistSource) {
+        listening.toggleFavorite(source)
+        if let failure = listening.error { error = failure }
     }
     var playingTitle: String? { current?.name ?? onlineCurrent?.title }
     var playingArtist: String { current?.artist ?? onlineCurrent?.artist ?? "" }
@@ -86,6 +95,7 @@ final class AudioLibrary: NSObject {
     }
 
     init(root: URL) {
+        listening = ListeningStore(root: root)
         directory = root
         manifest = root.appending(path: "library.json")
         effectsFile = root.appending(path: "effects.json")
@@ -295,9 +305,14 @@ final class AudioLibrary: NSObject {
             isPlaying = true
             commands.update()
             monitor = Task { @MainActor [weak self] in
+                var recorded = false
                 while !Task.isCancelled {
                     try? await Task.sleep(for: .seconds(1))
                     guard !Task.isCancelled, let self, self.generation == request else { return }
+                    if !recorded, item.status == .readyToPlay, self.elapsed > 0 {
+                        self.listening.record(.online(self.onlineCurrent ?? track))
+                        recorded = true
+                    }
                     if item.status == .failed {
                         self.error = item.error?.localizedDescription ?? "The audio stream failed."
                         self.isPlaying = false
@@ -336,6 +351,7 @@ final class AudioLibrary: NSObject {
                 current = track
                 streamPlayer?.play()
                 isPlaying = true
+                listening.record(.local(track.id))
                 commands.update()
                 return
             }
@@ -353,6 +369,7 @@ final class AudioLibrary: NSObject {
             current = track
             isPlaying = next.play()
             if !isPlaying { throw PlaybackError.unavailable }
+            listening.record(.local(track.id))
             commands.update()
         } catch { self.error = error.localizedDescription }
     }

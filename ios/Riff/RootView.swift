@@ -130,6 +130,11 @@ struct NowPlayingView: View {
                             Label("Repeat: " + library.repeatMode.rawValue, systemImage: library.repeatMode == .one ? "repeat.1" : "repeat")
                         }
                     }.labelStyle(.iconOnly).buttonStyle(.bordered)
+                    if let source = library.playingSource {
+                        Button(library.listening.isFavorite(source) ? "Remove from Favorites" : "Add to Favorites", systemImage: library.listening.isFavorite(source) ? "heart.fill" : "heart") {
+                            library.toggleFavorite(source)
+                        }.buttonStyle(.bordered)
+                    }
                     AudioRoutePicker().frame(width: 44, height: 44).accessibilityLabel("Audio output")
                     NavigationLink { AudioEditorView(library: library) } label: { Label("Audio Editor", systemImage: "waveform.path") }
                         .buttonStyle(.bordered)

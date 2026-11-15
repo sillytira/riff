@@ -21,6 +21,15 @@ final class NavigationTests: XCTestCase {
         app.buttons["now-playing-open"].tap()
         XCTAssertTrue(app.navigationBars["Now Playing"].waitForExistence(timeout: 10))
         attach(app, name: "Now Playing with embedded cover")
+        app.buttons["Add to Favorites"].tap()
+        app.buttons["Close"].tap()
+        app.buttons["Favorites"].tap()
+        XCTAssertTrue(app.navigationBars["Favorites"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Metadata Test Song"].firstMatch.exists)
+        app.terminate()
+        app.launch()
+        app.buttons["Favorites"].tap()
+        XCTAssertTrue(app.staticTexts["Metadata Test Song"].firstMatch.waitForExistence(timeout: 5))
     }
 
     func testLibraryDiscoverAndDownloadsAreReachable() {

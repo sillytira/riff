@@ -14,32 +14,41 @@ struct LibraryView: View {
 
     var body: some View {
         NavigationStack {
-            List(matches) { track in
-                Button { library.play(track) } label: {
-                    HStack(spacing: 16) {
-                        TrackArtwork(url: track.artworkURL, size: 52)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(track.name).font(.headline).foregroundStyle(.primary)
-                            if let artist = track.artist, !artist.isEmpty { Text(artist).font(.caption).foregroundStyle(.secondary) }
-                        }
-                        Spacer()
-                        Image(systemName: "play.fill").foregroundStyle(.secondary)
-                    }
+            List {
+                Section {
+                    NavigationLink { ListeningView(library: library, favorites: true) } label: { Label("Favorites", systemImage: "heart") }
+                    NavigationLink { ListeningView(library: library, favorites: false) } label: { Label("Recently Played", systemImage: "clock") }
                 }
-                .accessibilityIdentifier("local-track-" + track.id.uuidString)
-                .listRowBackground(Color.clear)
-            }
-            .overlay {
-                if library.tracks.isEmpty {
-                    ContentUnavailableView {
-                        Label("Your music, with you", systemImage: "music.note.house")
-                    } description: {
-                        Text("Import audio from Files to start your offline library.")
-                    } actions: {
-                        Button("Import audio") { importing = true }.buttonStyle(.borderedProminent)
+                Section("Songs") {
+                    if library.tracks.isEmpty {
+                        ContentUnavailableView {
+                            Label("Your music, with you", systemImage: "music.note.house")
+                        } description: {
+                            Text("Import audio from Files to start your offline library.")
+                        } actions: {
+                            Button("Import audio") { importing = true }.buttonStyle(.borderedProminent)
+                        }.listRowBackground(Color.clear)
+                    } else if matches.isEmpty {
+                        ContentUnavailableView.search(text: query).listRowBackground(Color.clear)
                     }
-                } else if matches.isEmpty {
-                    ContentUnavailableView.search(text: query)
+                    ForEach(matches) { track in
+                        Button { library.play(track) } label: {
+                            HStack(spacing: 16) {
+                                TrackArtwork(url: track.artworkURL, size: 52)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(track.name).font(.headline).foregroundStyle(.primary)
+                                    if let artist = track.artist, !artist.isEmpty { Text(artist).font(.caption).foregroundStyle(.secondary) }
+                                }
+                                Spacer()
+                                Image(systemName: "play.fill").foregroundStyle(.secondary)
+                            }
+                        }
+                        .accessibilityIdentifier("local-track-" + track.id.uuidString)
+                        .listRowBackground(Color.clear)
+                        .contextMenu {
+                            Button(library.listening.isFavorite(.local(track.id)) ? "Remove from Favorites" : "Add to Favorites", systemImage: "heart") { library.toggleFavorite(.local(track.id)) }
+                        }
+                    }
                 }
             }
             .navigationTitle("Riff")
