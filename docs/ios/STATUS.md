@@ -27,7 +27,10 @@ Draft PR: https://github.com/sillytira/riff/pull/1
   shuffle/repeat, seeking, transport commands and lock-screen metadata.
 - Native local AVAudioEngine playback with 10-band and grouped 3-band EQ,
   independent rate/pitch, reverb, distortion, presets and persisted settings.
-- Waveform selection editor with non-destructive WAV exports and sharing.
+- Waveform selection editor with WAV/MP3/FLAC/M4A/Opus exports, bitrate choices,
+  cancellation, sharing and persistent playable Opus copies.
+- Persistent library title/artist/album editing, file-tag rescan and safe download
+  removal with online equivalents retained in playlists/Favorites.
 - System AirPlay route picker, call interruption/headphone-removal handling,
   and the original Riff app icon.
 - LRCLIB lookup, synchronized LRC parser/import, per-song timing offset and lyric-line seeking.
@@ -41,10 +44,10 @@ Draft PR: https://github.com/sillytira/riff/pull/1
 
 ## Evidence obtained
 
-Latest fully passing native app build: https://github.com/sillytira/riff/actions/runs/43671585572
-Unsigned IPA: https://github.com/sillytira/riff/actions/runs/43671585572/artifacts/14145321440
-This run passed all 30 native tests, all five UI tests, device compilation and IPA
-packaging. It validates covers in Library/Now Playing, lock-screen artwork data,
+Latest fully passing native app build: https://github.com/sillytira/riff/actions/runs/43674535148
+Unsigned IPA: https://github.com/sillytira/riff/actions/runs/43674535148/artifacts/14146213433
+This run passed all 38 native tests, all six UI tests, device compilation and IPA
+packaging. It is the same app source commit now on `ios/liquid-glass` (de2d89b). It validates covers in Library/Now Playing, lock-screen artwork data,
 Favorites after relaunch, lyric recording matching/offset persistence, native DSP,
 queue/playlist/effect storage and search -> streaming -> download -> offline local
 playback -> waveform editor -> saved edit -> relaunch. Latest cover screenshots
@@ -59,12 +62,23 @@ explicit Sendable callbacks fixed it. The UI flow then exposed unseekable HTTP
 fixtures and an editor that followed playback-queue changes. Byte-range fixtures,
 a paused sustained clip and a stable editor selection fixed those issues.
 
-**Export integration:** branch `ios/native-exports`, commit 42da2c5, is under native
-validation in run 43672176869. Simulator compilation and native tests passed;
-UI/device packaging are pending. The branch integrates WAV/MP3/FLAC/M4A/Opus export,
-quality choices, cancellation and persistent encoded-plus-playable Opus copies.
-Do not call these formats available in the main branch IPA until integration is
-merged and that app build passes. The main development IPA above still exports WAV.
+**Export/library integration:** run 43673895681 passed all 35 native tests and
+five UI tests, including WAV and MP3 export through the editor, then packaged its
+IPA. Run 43674535148 additionally passed metadata editing/removal and six UI tests.
+These changes are merged into `ios/liquid-glass`. Formats are WAV, MP3, FLAC, M4A
+and Opus; Opus retains its encoded file plus a playable PCM copy. Save and Share
+are in the editor navigation bar. Native tests validate audible conversion,
+relaunch playback, cancellation and bundled licenses. Library metadata edits
+survive asynchronous indexing and can reload file tags. Removal validates owned
+paths, stops active playback and retains online equivalents in playlists/Favorites.
+
+**Streaming DSP in progress:** branch `ios/streaming-dsp` adds a cancellable native
+FFmpeg HTTP/HLS decoder, bounded PCM buffering and the existing effects graph for
+remote playback. Run 43678305700 compiled the codec libraries but failed a Swift
+error-state assignment; commit 23f2c1b fixes it. The next run is pending. New tests
+cover PCM/seek/playback, invalid TLS certificates (including HLS children), and
+credential scoping across playlist children/redirects. This is not yet merged.
+Offline system-managed HLS packages still use AVPlayer and support speed only.
 
 **Live providers:** macOS run https://github.com/sillytira/riff/actions/runs/43622202851
 failed overall because YouTube search returned 15 results but resolving three
@@ -103,15 +117,14 @@ send private cookies or passwords through chat; implement local account handling
 1. Validate current CI and inspect playback/editor screenshots; fix failures.
 2. Validate native YouTube sign-in/cookie handling. Real YouTube/JSC and physical-device HLS verification remain
    required; hosted runners encountered a YouTube sign-in challenge.
-3. Add MP3/FLAC/M4A/Opus conversion/export, missing decoders such as OGG, and full
-   streaming DSP. Current full DSP applies to direct local files; streaming and
-   HLS currently support playback speed. WAV is the current effects export format.
+3. Finish missing input decoders such as OGG and full streaming DSP (branch in
+   progress). Export formats are integrated. Current full DSP applies to direct
+   local files; streaming and system-managed HLS currently support playback speed.
    Prefer a current in-process codec build; do not introduce a companion server.
 4. Finish Spotify/Apple/Deezer/etc. playlist migration and account library flows.
    Current public import delegates to yt-dlp, which does not cover every original
    metadata-only provider. Do not claim those providers work yet.
-5. Finish library removal, account/library backup and
-   restore, download progress/recovery and duplicate handling.
+5. Finish account/library backup and restore, download progress/recovery and duplicate handling.
 6. Complete interruption/route/background download relaunch recovery and verify
    Now Playing artwork on a physical device. Current lifecycle handling
    compiles and has service tests, but phone-call/background behavior is unverified.
@@ -145,5 +158,5 @@ Opus for Apple Silicon host, iPhone and simulator. It includes a cancellation-aw
 C conversion API, MP3/FLAC/M4A/Opus conversion checks, metadata retention checks and
 FLAC sample equality checks. Run 43671363635 passed host conversion, metadata, lossless-sample equality,
 existing-file preservation and cancellation checks, then built the iPhone and
-simulator libraries. The standalone dependency build is validated; app integration is on `ios/native-exports` as described above. The main IPA still exports WAV only. Do not mark the format
+simulator libraries. The dependency and app export integration are validated and merged. Streaming DSP is on a separate branch as described above. Do not mark the format
 conversion or streaming DSP gates complete.
