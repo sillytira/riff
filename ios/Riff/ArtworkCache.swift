@@ -45,15 +45,14 @@ actor ArtworkCache {
             var request = URLRequest(url: source)
             request.timeoutInterval = 15
             request.setValue("Riff/0.7.5 (iOS)", forHTTPHeaderField: "User-Agent")
-            let (bytes, response) = try await session.bytes(for: request)
+            let (download, response) = try await session.download(for: request)
+            defer { try? FileManager.default.removeItem(at: download) }
             guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode), response.expectedContentLength <= Int64(maximumBytes) else {
                 throw URLError(.badServerResponse)
             }
-            var data = Data()
-            for try await byte in bytes {
-                guard data.count < maximumBytes else { throw URLError(.dataLengthExceedsMaximum) }
-                data.append(byte)
-            }
+            let size = try download.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+            guard size > 0, size <= maximumBytes else { throw URLError(.dataLengthExceedsMaximum) }
+            let data = try Data(contentsOf: download)
             master = try thumbnail(data, size: 1024)
             try persist(master, key: key)
         }
