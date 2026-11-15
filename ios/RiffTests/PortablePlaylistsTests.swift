@@ -38,18 +38,18 @@ final class PortablePlaylistsTests: XCTestCase {
         XCTAssertEqual(PlaylistStore(root: root).playlists[0].entries.count, 1)
     }
 
-    func testImportedFileReferenceMatchesUniqueLibraryAudioAfterImport() throws {
+    func testImportedFileReferenceMatchesUniqueLibraryAudioAfterImport() async throws {
         let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
         let library = AudioLibrary(root: root)
         let fixture = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "ui-tone", withExtension: "wav"))
         let reference = LocalFileReference(filename: "desktop.wav", title: "ui-tone", artist: "", album: nil, duration: nil)
         XCTAssertNil(library.matchingLocalFile(reference))
-        library.importFiles([fixture])
+        await library.importFiles([fixture])
         XCTAssertEqual(library.matchingLocalFile(reference)?.id, library.tracks.first?.id)
         let second = root.appending(path: "other.wav")
         try FileManager.default.copyItem(at: fixture, to: second)
-        library.importFiles([second])
+        await library.importFiles([second])
         let duplicate = try XCTUnwrap(library.tracks.last)
         try library.updateMetadata(duplicate.id, title: "ui-tone", artist: "", album: "")
         XCTAssertNil(library.matchingLocalFile(reference), "An ambiguous local match must not play the wrong recording")

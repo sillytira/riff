@@ -31,7 +31,7 @@ final class ArtworkCacheTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: root) }
         let source = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "tagged", withExtension: "m4a"))
         let library = AudioLibrary(root: root)
-        library.importFiles([source])
+        await library.importFiles([source])
         for _ in 0..<100 {
             if library.tracks.first?.metadataIndexed == true { break }
             try await Task.sleep(for: .milliseconds(100))

@@ -49,7 +49,7 @@ final class CodecTests: XCTestCase {
         let storage = root.appending(path: "library")
         let library = AudioLibrary(root: storage)
         let original = LocalTrack(id: UUID(), name: "Song", filename: "original.wav", artist: "Artist")
-        try library.importEditedFile(encoded, original: original, playableCopy: decoded)
+        try await library.importEditedFile(encoded, original: original, playableCopy: decoded)
         try FileManager.default.removeItem(at: encoded)
         try FileManager.default.removeItem(at: decoded)
         let restored = AudioLibrary(root: storage)

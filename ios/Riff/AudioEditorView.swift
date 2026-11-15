@@ -133,22 +133,15 @@ struct AudioEditorView: View {
                 let rendered = folder.appending(path: "selection.wav")
                 try await AudioProcessor.shared.exportWAV(input: url, output: rendered, start: selectedStart, end: selectedEnd, settings: settings)
                 let output: URL
-                var playableCopy: URL?
                 if selectedFormat == .wav { output = rendered }
                 else {
                     output = folder.appending(path: "selection." + selectedFormat.rawValue)
                     try await CodecService.shared.convert(input: rendered, output: output, format: selectedFormat, bitrate: selectedBitrate,
                                                          title: track.name + " (edit)", artist: track.artist ?? "", album: track.album ?? "")
-                    if selectedFormat == .opus {
-                        let decoded = folder.appending(path: "playback.wav")
-                        try await CodecService.shared.convert(input: output, output: decoded, format: .wav)
-                        playableCopy = decoded
-                    }
                     try? FileManager.default.removeItem(at: rendered)
                 }
                 try Task.checkCancellation()
-                try library.importEditedFile(output, original: track, playableCopy: playableCopy)
-                if let playableCopy { try? FileManager.default.removeItem(at: playableCopy) }
+                try await library.importEditedFile(output, original: track)
                 exported = output
             } catch {
                 try? FileManager.default.removeItem(at: folder)

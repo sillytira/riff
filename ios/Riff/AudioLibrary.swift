@@ -16,6 +16,7 @@ struct LocalTrack: Codable, Identifiable, Sendable {
     var playbackFilename: String? = nil
     var metadataCustomized: Bool? = nil
     var downloadJobID: UUID? = nil
+    var codecPlayback: Bool? = nil
 
     var onlineEquivalent: OnlineTrack? {
         guard let webpageURL, let url = URL(string: webpageURL), ["https", "http"].contains(url.scheme?.lowercased() ?? "") else { return nil }
@@ -33,6 +34,7 @@ final class AudioLibrary: NSObject {
     var error: String?
     private(set) var onlineCurrent: OnlineTrack?
     private(set) var isLoading = false
+    private(set) var activeImports = 0
     var effects = AudioEffectSettings() {
         didSet {
             player?.settings = effects
@@ -223,7 +225,9 @@ final class AudioLibrary: NSObject {
         catch { self.error = "Could not save audio effects: " + error.localizedDescription }
     }
 
-    func importFiles(_ urls: [URL]) {
+    func importFiles(_ urls: [URL]) async {
+        activeImports += 1
+        defer { activeImports -= 1 }
         guard manifestIsReadable else { error = "The library index could not be read. Its original data has been preserved."; return }
         for source in urls {
             let access = source.startAccessingSecurityScopedResource()
@@ -234,8 +238,11 @@ final class AudioLibrary: NSObject {
             do {
                 try FileManager.default.copyItem(at: source, to: destination)
                 // Validate decodability before committing an entry to the library.
-                _ = try AVAudioPlayer(contentsOf: destination)
-                let track = LocalTrack(id: id, name: source.deletingPathExtension().lastPathComponent, filename: filename)
+                let validated = try await AudioFileValidator.shared.validate(destination)
+                try Task.checkCancellation()
+                var track = LocalTrack(id: id, name: source.deletingPathExtension().lastPathComponent, filename: filename)
+                track.codecPlayback = validated.usesCodecs
+                track.duration = validated.duration
                 let updated = tracks + [track]
                 try JSONEncoder().encode(updated).write(to: manifest, options: .atomic)
                 tracks = updated
@@ -247,7 +254,7 @@ final class AudioLibrary: NSObject {
         }
     }
 
-    func importDownload(_ source: URL, media: ResolvedMedia, downloadJobID: UUID? = nil) throws {
+    func importDownload(_ source: URL, media: ResolvedMedia, downloadJobID: UUID? = nil) async throws {
         guard manifestIsReadable else { throw ExtractionError(message: "The library index is unreadable; existing data was preserved.") }
         if let downloadJobID, tracks.contains(where: { $0.downloadJobID == downloadJobID }) { return }
         let id = UUID()
@@ -256,12 +263,18 @@ final class AudioLibrary: NSObject {
         let destination = directory.appending(path: filename)
         do {
             try FileManager.default.copyItem(at: source, to: destination)
-            _ = try AVAudioPlayer(contentsOf: destination)
+            let validated = try await AudioFileValidator.shared.validate(destination)
+            try Task.checkCancellation()
+            if let downloadJobID, tracks.contains(where: { $0.downloadJobID == downloadJobID }) {
+                try? FileManager.default.removeItem(at: destination)
+                return
+            }
             var track = LocalTrack(id: id, name: media.track.title, filename: filename, artist: media.track.artist,
                                    artworkURL: media.track.artworkURL, webpageURL: media.track.webpageURL.isEmpty ? nil : media.track.webpageURL)
             track.downloadJobID = downloadJobID
+            track.codecPlayback = validated.usesCodecs
             track.album = media.track.album
-            track.duration = media.track.duration
+            track.duration = media.track.duration ?? validated.duration
             track.sourceProvider = media.track.provider
             let updated = tracks + [track]
             try JSONEncoder().encode(updated).write(to: manifest, options: .atomic)
@@ -393,7 +406,7 @@ final class AudioLibrary: NSObject {
         return directory.appending(path: track.playbackFilename ?? track.filename)
     }
 
-    func importEditedFile(_ source: URL, original: LocalTrack, playableCopy: URL? = nil) throws {
+    func importEditedFile(_ source: URL, original: LocalTrack, playableCopy: URL? = nil) async throws {
         guard manifestIsReadable else { throw ExtractionError(message: "The library index is unreadable; existing data was preserved.") }
         let id = UUID()
         let ext = source.pathExtension.lowercased()
@@ -405,10 +418,13 @@ final class AudioLibrary: NSObject {
         do {
             try FileManager.default.copyItem(at: source, to: destination)
             if let playableCopy, let playbackDestination { try FileManager.default.copyItem(at: playableCopy, to: playbackDestination) }
-            _ = try AVAudioFile(forReading: playbackDestination ?? destination)
+            let validated = try await AudioFileValidator.shared.validate(playbackDestination ?? destination)
+            try Task.checkCancellation()
             var edited = LocalTrack(id: id, name: original.name + " (edit)", filename: filename, artist: original.artist, artworkURL: original.artworkURL)
             edited.album = original.album
             edited.playbackFilename = playbackName
+            edited.codecPlayback = validated.usesCodecs
+            edited.duration = validated.duration
             let updated = tracks + [edited]
             try JSONEncoder().encode(updated).write(to: manifest, options: .atomic)
             tracks = updated
@@ -457,8 +473,7 @@ final class AudioLibrary: NSObject {
             })?.id)
         }
         if let saved = offlineTrack(for: track.webpageURL) {
-            play(saved, preserveQueue: true)
-            if position > 0 { seek(to: position) }
+            play(saved, preserveQueue: true, startingAt: position)
             return
         }
         let request = UUID()
@@ -518,7 +533,7 @@ final class AudioLibrary: NSObject {
         }
     }
 
-    func play(_ track: LocalTrack, preserveQueue: Bool = false) {
+    func play(_ track: LocalTrack, preserveQueue: Bool = false, startingAt position: Double = 0) {
         _ = lifecycle
         prepareArtwork(for: track)
         if !preserveQueue {
@@ -555,7 +570,13 @@ final class AudioLibrary: NSObject {
                 commands.update()
                 return
             }
-            let next = try NativeAudioPlayer(contentsOf: directory.appending(path: track.playbackFilename ?? track.filename))
+            if track.codecPlayback == true {
+                try playDecoded(track, position: position)
+                return
+            }
+            let next: NativeAudioPlayer
+            do { next = try NativeAudioPlayer(contentsOf: directory.appending(path: track.playbackFilename ?? track.filename)) }
+            catch { try playDecoded(track, position: position); return }
             next.settings = effects
             next.onFinish = { [weak self] in
                 guard let self else { return }
@@ -567,11 +588,54 @@ final class AudioLibrary: NSObject {
             player?.stop()
             player = next
             current = track
+            if position > 0 { next.currentTime = position }
             isPlaying = next.play()
             if !isPlaying { throw PlaybackError.unavailable }
             listening.record(.local(track.id), equivalents: equivalentSources(for: .local(track.id)))
             commands.update()
         } catch { self.isPlaying = false; self.error = error.localizedDescription; commands.clear() }
+    }
+
+    private func playDecoded(_ track: LocalTrack, position: Double) throws {
+        let request = generation
+        let streaming = try NativeStreamingPlayer(duration: track.duration, settings: effects)
+        let input = directory.appending(path: track.playbackFilename ?? track.filename)
+        current = track
+        isLoading = true
+        networkPlayer = streaming
+        streaming.onBuffering = { [weak self] value in
+            guard let self, self.generation == request else { return }
+            self.isLoading = value
+            self.commands.update()
+        }
+        streaming.onFinish = { [weak self] in
+            guard let self, self.generation == request else { return }
+            self.isPlaying = false
+            self.commands.update()
+            self.next(automatic: true)
+        }
+        streaming.onError = { [weak self] error in
+            guard let self, self.generation == request else { return }
+            self.error = error.localizedDescription
+            self.isPlaying = false
+            self.commands.update()
+        }
+        monitor = Task { [weak self] in
+            guard let self else { return }
+            defer { if self.generation == request { self.isLoading = false; self.monitor = nil } }
+            do {
+                try await streaming.prepare(url: input, headers: [:], position: position)
+                guard self.generation == request else { streaming.stop(); return }
+                self.isPlaying = true
+                self.listening.record(.local(track.id), equivalents: self.equivalentSources(for: .local(track.id)))
+                self.commands.update()
+            } catch {
+                guard self.generation == request else { return }
+                self.isPlaying = false
+                if !(error is CancellationError) { self.error = error.localizedDescription }
+                self.commands.update()
+            }
+        }
     }
 
     func prepareArtwork(for track: LocalTrack) {
@@ -595,7 +659,10 @@ final class AudioLibrary: NSObject {
     func togglePlayback() {
         if let networkPlayer {
             if isPlaying { networkPlayer.pause(); isPlaying = false }
-            else if networkPlayer.needsRefresh, let track = onlineCurrent {
+            else if networkPlayer.hasFailed, let track = current {
+                play(track, preserveQueue: true, startingAt: networkPlayer.elapsed)
+                return
+            } else if networkPlayer.needsRefresh, let track = onlineCurrent {
                 let position = networkPlayer.hasEnded ? 0 : networkPlayer.elapsed
                 Task { await playOnline(track, preserveQueue: true, startingAt: position) }
                 return

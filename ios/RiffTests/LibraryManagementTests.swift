@@ -10,7 +10,7 @@ final class LibraryManagementTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: root) }
         let fixture = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "tagged", withExtension: "m4a"))
         let library = AudioLibrary(root: root)
-        library.importFiles([fixture])
+        await library.importFiles([fixture])
         let id = try XCTUnwrap(library.tracks.first?.id)
         try library.updateMetadata(id, title: "My title", artist: "My artist", album: "My album")
         for _ in 0..<100 {
@@ -40,7 +40,7 @@ final class LibraryManagementTests: XCTestCase {
         let originalBytes = try Data(contentsOf: input)
         let online = OnlineTrack(id: "song", title: "Song", artist: "Artist", webpageURL: "https://example.com/song", artworkURL: nil, duration: 2, provider: "Generic")
         let library = AudioLibrary(root: root)
-        try library.importDownload(input, media: ResolvedMedia(track: online, streamURL: "https://example.com/audio.wav", headers: [:], ext: "wav", protocol: "https"))
+        try await library.importDownload(input, media: ResolvedMedia(track: online, streamURL: "https://example.com/audio.wav", headers: [:], ext: "wav", protocol: "https"))
         let track = try XCTUnwrap(library.tracks.first)
         let store = PlaylistStore(root: root)
         let entryID = UUID()

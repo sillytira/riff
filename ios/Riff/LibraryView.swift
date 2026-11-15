@@ -64,6 +64,9 @@ struct LibraryView: View {
                     }
                 }
             }
+            .overlay(alignment: .bottom) {
+                if library.activeImports > 0 { ProgressView("Importing audio…").padding().background(.regularMaterial, in: .capsule).padding() }
+            }
             .navigationTitle("Riff")
             .searchable(text: $query, prompt: "Search your music")
             .toolbar {
@@ -87,7 +90,7 @@ struct LibraryView: View {
             }
             .fileImporter(isPresented: $importing, allowedContentTypes: [.audio], allowsMultipleSelection: true) { result in
                 switch result {
-                case .success(let urls): library.importFiles(urls)
+                case .success(let urls): Task { await library.importFiles(urls) }
                 case .failure(let error): library.error = error.localizedDescription
                 }
             }

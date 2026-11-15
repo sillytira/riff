@@ -84,7 +84,7 @@ final class DownloadRecoveryTests: XCTestCase {
         // Emulate termination after the library commit but before job completion.
         let library = AudioLibrary(root: storage)
         let media = ResolvedMedia(track: online, streamURL: "", headers: [:], ext: "wav", protocol: "https")
-        try library.importDownload(input, media: media, downloadJobID: identity.job)
+        try await library.importDownload(input, media: media, downloadJobID: identity.job)
         let originalID = library.tracks.first?.id
         let restoredLibrary = AudioLibrary(root: storage)
         let restored = DownloadManager(library: restoredLibrary, root: downloads, transfers: service)

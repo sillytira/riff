@@ -25,7 +25,7 @@ final class MediaExtractorTests: XCTestCase {
         let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
         let library = AudioLibrary(root: root)
-        try library.importDownload(file, media: media)
+        try await library.importDownload(file, media: media)
         XCTAssertEqual(library.tracks.count, 1)
         let restored = AudioLibrary(root: root)
         XCTAssertEqual(restored.tracks.first?.webpageURL, media.track.webpageURL)

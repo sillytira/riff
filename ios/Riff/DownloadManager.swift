@@ -219,7 +219,7 @@ final class DownloadManager {
                 let location = try transfers.location(receipt)
                 let media = ResolvedMedia(track: job.track, streamURL: "", headers: [:], ext: job.ext, protocol: job.isHLS ? "m3u8" : "https")
                 if receipt.isHLS { try await library.importHLSDownload(location, media: media, downloadJobID: job.id) }
-                else { try library.importDownload(location, media: media, downloadJobID: job.id) }
+                else { try await library.importDownload(location, media: media, downloadJobID: job.id) }
                 guard let index = self.index(job.id) else { return }
                 self.jobs[index].state = .saved
                 self.jobs[index].hlsProgress = 1
