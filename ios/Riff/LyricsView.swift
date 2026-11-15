@@ -103,9 +103,10 @@ struct LyricsView: View {
     }
     private func save(_ selected: LyricsDocument, key: String) {
         lookupID = UUID()
+        if library.lyricsKey == key { error = nil }
         Task {
             do { try await LyricsStore.shared.save(selected, key: key) }
-            catch { self.error = "Lyrics could not be saved on this device." }
+            catch { if library.lyricsKey == key { self.error = "Lyrics could not be saved on this device." } }
             guard library.lyricsKey == key else { return }
             document = selected
             offset = 0
