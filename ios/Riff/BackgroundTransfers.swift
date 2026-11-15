@@ -152,7 +152,7 @@ final class BackgroundTransfers: NSObject, URLSessionDownloadDelegate, AVAssetDo
         do {
             guard let response = downloadTask.response as? HTTPURLResponse, (200..<300).contains(response.statusCode) else { throw ExtractionError(message: "The provider refused the audio download. Retry to obtain a fresh link.") }
             try checkpoint(identity, location: location, hls: false)
-        } catch { emit(.failed(identity, error.localizedDescription, false)) }
+        } catch { emit(.failed(identity, "Could not preserve downloaded audio: " + transferFailure(error), false)) }
     }
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
         guard let identity = TransferIdentity(downloadTask.taskDescription) else { return }
@@ -161,7 +161,7 @@ final class BackgroundTransfers: NSObject, URLSessionDownloadDelegate, AVAssetDo
     func urlSession(_ session: URLSession, assetDownloadTask: AVAssetDownloadTask, didFinishDownloadingTo location: URL) {
         guard let identity = TransferIdentity(assetDownloadTask.taskDescription) else { return }
         do { try checkpoint(identity, location: location, hls: true) }
-        catch { emit(.failed(identity, error.localizedDescription, false)) }
+        catch { emit(.failed(identity, "Could not preserve downloaded audio: " + transferFailure(error), false)) }
     }
     func urlSession(_ session: URLSession, assetDownloadTask: AVAssetDownloadTask, didLoad timeRange: CMTimeRange, totalTimeRangesLoaded: [NSValue], timeRangeExpectedToLoad: CMTimeRange) {
         guard let identity = TransferIdentity(assetDownloadTask.taskDescription) else { return }
@@ -171,11 +171,21 @@ final class BackgroundTransfers: NSObject, URLSessionDownloadDelegate, AVAssetDo
     }
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: (any Error)?) {
         guard let identity = TransferIdentity(task.taskDescription) else { return }
-        if let error { emit(.failed(identity, error.localizedDescription, (error as? URLError)?.code == .cancelled)); return }
+        if let error { emit(.failed(identity, transferFailure(error), (error as? URLError)?.code == .cancelled)); return }
         do {
             let receipt = try JSONDecoder().decode(DownloadReceipt.self, from: Data(contentsOf: receiptURL(identity)))
             emit(.finished(receipt))
         } catch { emit(.failed(identity, "The download completed without a recoverable audio file.", false)) }
+    }
+    private func transferFailure(_ error: any Error) -> String {
+        var current = error as NSError
+        var result = current.localizedDescription + " (" + current.domain + " " + String(current.code) + ")"
+        for _ in 0..<3 {
+            guard let underlying = current.userInfo[NSUnderlyingErrorKey] as? NSError else { break }
+            current = underlying
+            result += " / " + current.domain + " " + String(current.code)
+        }
+        return result
     }
     func urlSessionDidFinishEvents(forBackgroundURLSession session: URLSession) {
         if let id = session.configuration.identifier { emit(.drained(id)) }
