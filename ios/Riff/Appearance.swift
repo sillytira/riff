@@ -46,10 +46,10 @@ struct AppearanceSettings: View {
         Section("Appearance") {
             Picker("Color scheme", selection: appearance.$mode) {
                 ForEach(InterfaceAppearance.allCases, id: \.self) { Text($0.title).tag($0) }
-            }
+            }.pickerStyle(.menu).accessibilityIdentifier("appearance-mode")
             Picker("Accent color", selection: appearance.$accent) {
                 ForEach(AccentChoice.allCases, id: \.self) { Text($0.title).tag($0) }
-            }
+            }.pickerStyle(.menu).accessibilityIdentifier("appearance-accent")
             if appearance.accent == .custom {
                 ColorPicker("Custom accent", selection: Binding(get: { appearance.customColor }, set: { color in
                     let resolved = color.resolve(in: environment)

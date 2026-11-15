@@ -4,6 +4,23 @@ import XCTest
 final class NavigationTests: XCTestCase {
     override func setUpWithError() throws { continueAfterFailure = false }
 
+    func testAppearanceControlsPersistAcrossRelaunch() {
+        let app = XCUIApplication()
+        app.launch()
+        app.buttons["Settings"].tap()
+        app.buttons["appearance-mode"].tap()
+        app.buttons["Dark"].tap()
+        app.buttons["appearance-accent"].tap()
+        app.buttons["Teal"].tap()
+        attach(app, name: "Dark glass with teal accent")
+        app.terminate()
+        app.launch()
+        app.buttons["Settings"].tap()
+        XCTAssertEqual(app.buttons["appearance-mode"].value as? String, "Dark")
+        XCTAssertEqual(app.buttons["appearance-accent"].value as? String, "Teal")
+        app.buttons["Reset appearance"].tap()
+    }
+
     func testArtworkFromDownloadedMetadataIsVisibleInLibraryAndPlayer() {
         let app = XCUIApplication()
         app.launch()
