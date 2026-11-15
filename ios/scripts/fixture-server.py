@@ -6,6 +6,7 @@ import http.server
 import os
 import re
 import ssl
+import time
 
 
 class MediaHandler(http.server.SimpleHTTPRequestHandler):
@@ -13,6 +14,8 @@ class MediaHandler(http.server.SimpleHTTPRequestHandler):
 
     def send_head(self):
         self.remaining = None
+        self.slow = self.path.startswith('/slow/')
+        if self.slow: self.path = self.path.removeprefix('/slow')
         if self.path == '/redirect-cross-host':
             self.send_response(302)
             self.send_header('Location', 'http://localhost:8765/no-auth/ui-tone.wav')
@@ -77,11 +80,12 @@ class MediaHandler(http.server.SimpleHTTPRequestHandler):
             if self.remaining is None:
                 return super().copyfile(source, outputfile)
             while self.remaining > 0:
-                data = source.read(min(self.remaining, 65536))
+                data = source.read(min(self.remaining, 16384 if self.slow else 65536))
                 if not data:
                     break
                 outputfile.write(data)
                 self.remaining -= len(data)
+                if self.slow: time.sleep(0.03)
         except (BrokenPipeError, ConnectionResetError):
             # AVPlayer intentionally cancels speculative reads when seeking.
             pass

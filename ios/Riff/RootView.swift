@@ -2,8 +2,8 @@ import SwiftUI
 
 struct RootView: View {
     let library: AudioLibrary
-    @State private var playlists = PlaylistStore()
-    @State private var downloads = DownloadManager()
+    let playlists: PlaylistStore
+    let downloads: DownloadManager
     @State private var showPlayer = false
 
     var body: some View {
@@ -21,9 +21,9 @@ struct RootView: View {
             }
         }
         .sheet(isPresented: $showPlayer) { NowPlayingView(library: library, downloads: downloads) }
-        .alert("Riff", isPresented: Binding(get: { library.error != nil }, set: { if !$0 { library.error = nil } })) {
-            Button("OK") { library.error = nil }
-        } message: { Text(library.error ?? "") }
+        .alert("Riff", isPresented: Binding(get: { library.error != nil || downloads.error != nil }, set: { if !$0 { library.error = nil; downloads.error = nil } })) {
+            Button("OK") { library.error = nil; downloads.error = nil }
+        } message: { Text(library.error ?? downloads.error ?? "") }
     }
 
     private var tabs: some View {
@@ -59,21 +59,33 @@ struct RootView: View {
 
 struct DownloadsView: View {
     let downloads: DownloadManager
+    @State private var clearing = false
     var body: some View {
         NavigationStack {
             List(downloads.jobs) { job in
-                HStack {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(job.track.title).font(.headline)
-                        Text(job.status).font(.caption).foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(job.track.title).font(.headline)
+                            Text(job.status).font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        if [.queued, .resolving, .downloading].contains(job.state) {
+                            Button("Pause download", systemImage: "pause.circle") { downloads.pause(job.id) }.labelStyle(.iconOnly)
+                            Button("Cancel", systemImage: "xmark.circle") { downloads.cancel(job.id) }.labelStyle(.iconOnly)
+                        } else if [.paused, .failed, .cancelled].contains(job.state) {
+                            Button(job.state == .paused ? "Resume download" : "Retry download", systemImage: "arrow.clockwise.circle") { downloads.resume(job.id) }.labelStyle(.iconOnly)
+                            if job.state == .paused { Button("Cancel", systemImage: "xmark.circle") { downloads.cancel(job.id) }.labelStyle(.iconOnly) }
+                        } else if job.state == .importing { ProgressView() }
+                        else if job.state == .saved { Image(systemName: "checkmark.circle.fill").foregroundStyle(.green).accessibilityLabel("Saved offline") }
                     }
-                    Spacer()
-                    if job.isActive {
-                        Button("Cancel", systemImage: "xmark.circle") { downloads.cancel(job.id) }.labelStyle(.iconOnly)
-                    } else if job.status == "Saved offline" {
-                        Image(systemName: "checkmark.circle.fill").foregroundStyle(.green).accessibilityLabel("Saved offline")
+                    if job.state == .downloading || job.state == .paused {
+                        ProgressView(value: job.progress).accessibilityLabel("Download progress")
+                        if job.expected > 0 {
+                            Text(ByteCountFormatter.string(fromByteCount: job.received, countStyle: .file) + " of " + ByteCountFormatter.string(fromByteCount: job.expected, countStyle: .file)).font(.caption2).foregroundStyle(.secondary)
+                        }
                     }
-                }
+                }.buttonStyle(.borderless)
             }
             .overlay {
                 if downloads.jobs.isEmpty {
@@ -81,6 +93,10 @@ struct DownloadsView: View {
                 }
             }
             .navigationTitle("Downloads")
+            .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Clear download history", systemImage: "trash") { clearing = true } } }
+            .confirmationDialog("Clear completed download history?", isPresented: $clearing, titleVisibility: .visible) {
+                Button("Clear history", role: .destructive) { downloads.clearCompleted() }
+            } message: { Text("Downloaded music stays in your library.") }
         }
     }
 }
