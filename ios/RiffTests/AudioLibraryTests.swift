@@ -46,6 +46,14 @@ final class AudioLibraryTests: XCTestCase {
         XCTAssertTrue(library.tracks.isEmpty)
         XCTAssertNotNil(library.error)
         XCTAssertTrue(try FileManager.default.contentsOfDirectory(atPath: storage.path).isEmpty)
+        XCTAssertEqual(library.activeImports, 0)
+        XCTAssertEqual(library.importFailures.count, 1)
+        XCTAssertTrue(library.importFailures[0].message.contains("broken.mp3"))
+        let fixture = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "ui-tone", withExtension: "wav"))
+        await library.importFiles([fixture])
+        XCTAssertEqual(library.tracks.count, 1)
+        XCTAssertTrue(library.importFailures.isEmpty)
+        XCTAssertNil(library.error)
     }
 
     func testCorruptManifestIsReportedAndPreserved() throws {

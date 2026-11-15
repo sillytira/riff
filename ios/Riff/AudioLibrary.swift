@@ -226,13 +226,21 @@ final class AudioLibrary: NSObject {
         catch { self.error = "Could not save audio effects: " + error.localizedDescription }
     }
 
-    func dismissImportFailures() { importFailures = [] }
+    func dismissImportFailures() {
+        if let message = error, importFailures.contains(where: { $0.message == message }) { error = nil }
+        importFailures = []
+    }
 
     func importFiles(_ urls: [URL]) async {
-        if activeImports == 0 { importFailures = [] }
+        if activeImports == 0 { dismissImportFailures() }
         activeImports += 1
         defer { activeImports -= 1 }
-        guard manifestIsReadable else { error = "The library index could not be read. Its original data has been preserved."; return }
+        guard manifestIsReadable else {
+            let message = "The library index could not be read. Its original data has been preserved."
+            importFailures.append(AudioImportFailure(message: message))
+            error = message
+            return
+        }
         for source in urls {
             let access = source.startAccessingSecurityScopedResource()
             defer { if access { source.stopAccessingSecurityScopedResource() } }
