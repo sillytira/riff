@@ -165,7 +165,7 @@ final class NavigationTests: XCTestCase {
         XCTAssertTrue(edited.waitForExistence(timeout: 5))
         edited.press(forDuration: 1)
         app.buttons["Remove download"].tap()
-        let confirmation = app.buttons["confirm-remove-download"]
+        let confirmation = app.buttons["confirm-remove-download"].firstMatch
         XCTAssertTrue(confirmation.waitForExistence(timeout: 5))
         confirmation.tap()
         XCTAssertTrue(edited.waitForNonExistence(timeout: 5))
