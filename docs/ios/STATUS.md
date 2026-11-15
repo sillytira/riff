@@ -80,13 +80,31 @@ certificates on top-level and child HLS requests, and credential scoping across
 playlist children and redirects. These changes are merged. Offline system-managed
 HLS packages still use AVPlayer and support speed only.
 
-**Download recovery under validation:** branch `ios/download-recovery` adds
-protected persistent journals, OS background transfers, progress, pause/resume,
-relaunch receipts, and import identities preventing duplicate library entries after
-termination. The first run exposed a Swift error-reporting compile issue, fixed in
-b9058b5; run 43691682843 is validating it. Offline-first selection and a queue
-preservation test have been added locally and are not yet validated. Do not claim
-background recovery works on a physical device until tested there.
+**Download/appearance/playlist integration under validation:**
+`ios/download-recovery` adds protected journals, OS background transfers, progress,
+pause/resume, relaunch receipts, exactly-once import IDs and offline-first song
+selection. Foreground recovery passed; the real background-session test exposed
+NSURLErrorDomain -1 and XPC errors 4097/4099 when simulator apps were unsigned.
+Ad hoc simulator signing resolved service access. Run 43693993803 passed native
+validation and is running UI tests. The device IPA remains unsigned for sideloading.
+
+`ios/portable-playlists` combines these changes with system/light/dark appearance,
+preset/custom accents, persisted shuffle/repeat preferences, Favorites/history
+matching between online and saved copies, desktop playlist JSON import/export,
+retained local-file references, and an adaptive Now Playing glass control layout.
+Run 43694052421 passed native validation and is running UI tests. These changes
+are not yet merged into the main development branch.
+
+`ios/local-decoders` adds local in-process Vorbis/Opus decoding, metadata/artwork
+access and bounded PCM playback. Linux checks passed local OGG/Opus/FLAC decoding,
+seeking and metadata, plus OGG/Opus embedded artwork and local-input restrictions.
+A zero-length FIFO resize while discarding seek preroll was found and fixed.
+The bridge is undergoing iOS validation in run 43694833214. Additional local source
+connects asynchronous import validation, direct codec playback, temporary editor
+audio and Files type/open handling; those newer app changes are not yet validated.
+
+[Private Notion project notes](https://app.notion.com/p/419dbbb76e0781ae87f9d51339d820e7)
+record scope, build evidence, UI direction, remaining gates and device-test notes.
 
 **Live providers:** macOS run https://github.com/sillytira/riff/actions/runs/43622202851
 failed overall because YouTube search returned 15 results but resolving three
