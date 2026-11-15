@@ -543,7 +543,7 @@ final class AudioLibrary: NSObject {
                     try AVAudioSession.sharedInstance().setActive(true)
                     try networkPlayer.resume()
                     isPlaying = true
-                } catch { error = error.localizedDescription }
+                } catch { self.error = error.localizedDescription }
             }
             commands.update()
             return
